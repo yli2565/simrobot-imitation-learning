@@ -25,7 +25,7 @@ class RobotSelector(agent_selector):
     """
 
     def __init__(
-        self, possibleAgents: List[Any], robotObsShms: Dict[SharedMemoryHelper]
+        self, possibleAgents: List[Any], robotObsShms: Dict[Any,SharedMemoryHelper]
     ):
         self.possibleAgents: Set[Any] = set(possibleAgents)
         self.robotObsShms: Dict[SharedMemoryHelper] = robotObsShms
@@ -33,7 +33,7 @@ class RobotSelector(agent_selector):
 
     def reinit(self) -> None:
         """Recover the agent pool to indicate a new round"""
-        self.agentPool = self.possibleAgents
+        self.agentPool = self.possibleAgents.copy()
 
     def reset(self) -> Any:
         """Reset to the original order."""
@@ -42,6 +42,9 @@ class RobotSelector(agent_selector):
 
     def next(self) -> Any:
         """Get the next agent."""
+        if len(self.agentPool) == 0:
+            self.reinit()
+
         currentAgentPool = list(self.agentPool)
         poolSize = len(currentAgentPool)
         selectRobotIdx = 0

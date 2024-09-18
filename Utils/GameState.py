@@ -60,6 +60,14 @@ class PlayerState(Enum):
     active = auto()
 
 
+class GameControllerState(Enum):
+    STATE_INITIAL = 0
+    STATE_READY = auto()
+    STATE_SET = auto()
+    STATE_PLAYING = auto()
+    STATE_FINISHED = auto()
+
+
 class CompetitionPhase(Enum):
     roundRobin = 0
     playOff = auto()

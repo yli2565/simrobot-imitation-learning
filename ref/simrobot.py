@@ -25,7 +25,7 @@ from Utils import (
     kill_process,
     is_zombie,
     generateRos2,
-    generateCon,
+    generateSceneCon,
 )
 
 sys.path.append(sys.path[0] + "/..")
@@ -478,7 +478,7 @@ class parallel_env(ParallelEnv):
         with open(
             BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
         ) as conFile:
-            conFile.write(generateCon())
+            conFile.write(generateSceneCon())
 
 
         if DEBUG:

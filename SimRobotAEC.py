@@ -16,15 +16,18 @@ from pettingzoo.utils import agent_selector, wrappers
 from shapely import Point
 
 from InterThreadCommunication import SharedMemoryHelper, SharedMemoryManager
+from TypedShmem import ShmemHeap, ShmemAccessor, SDict, SList
 from Utils import (
     GameState,
     State,
+    GameControllerState,
     ObservationJosh,
     cfg2dict,
     kill_process,
     is_zombie,
     generateRos2,
-    generateCon,
+    generateSceneCon,
+    generateLogCon,
     RobotSelector,
     generatePoses,
     opponentPenaltyArea,
@@ -33,7 +36,7 @@ from Utils import (
 
 # these paths must match the ones used by the c++ code
 # BADGER_RL_SYSTEM_DIR = Path("/root/autodl-tmp/BadgerRLSystem/")
-BADGER_RL_SYSTEM_DIR = Path("/home/yuhao2024/Documents/BadgerRLSystem-josh/")
+BADGER_RL_SYSTEM_DIR = Path("/home/yuhao2024/Documents/SimRobotAEC/BadgerRLSystem/")
 # BADGER_RL_SYSTEM_DIR = Path("/home/chkxwlyh/Documents/Study/RL100/BadgerRLSystem/")
 
 DEBUG_PRINTS = False
@@ -61,14 +64,13 @@ class RobotTactic(Enum):
 
 
 def env(render_mode=None):
-    internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = SimRobotEnv(render_mode=internal_render_mode)
+    env = SimRobotEnv(render_mode=render_mode)
     # This wrapper is only for environments which print results to the terminal
     # if render_mode == "ansi":
     #     env = wrappers.CaptureStdoutWrapper(env)
     # this wrapper helps error handling for discrete action spaces
     env = wrappers.AssertOutOfBoundsWrapper(env)
-    # Provides a wide vareity of helpful user errors
+    # Provides a wide variety of helpful user errors
     # Strongly recommended
     env = wrappers.OrderEnforcingWrapper(env)
     return env
@@ -109,57 +111,34 @@ class SimRobotEnv(AECEnv):
         ):
             raise ValueError("Robot cannot be in multiple teams at the same time.")
 
-        self.possible_agents = {"Robot{}".format(rn) for rn in self.agentRobots}
-        self.agent_name_mapping = dict(
-            zip(self.possible_agents, list(range(len(self.possible_agents))))
-        )
+        # PettingZoo required fields
+        self.possible_agents = self.agentRobots
 
-        # Helper fields
-        self.team1 = list(filter(lambda x: 0 < x < 20, self.agentRobots))
-        self.team2 = list(filter(lambda x: 20 < x < 40, self.agentRobots))
-        self.teams = {0: self.team1, 1: self.team2}
+    # Helper fields
+    @property
+    def team1(self):
+        return list(filter(lambda x: 0 < x < 20, self.agentRobots))
 
-        # Robot that can move
-        moveableAgents = [*self.agentRobots, *self.BhumanRobots, *self.hijackedRobots]
+    @property
+    def team2(self):
+        return list(filter(lambda x: 20 < x < 40, self.agentRobots))
 
-        # Scene
-        self.sceneName = "PythonEnvGenerated"
-        # Generate .ros2 file and .con file
-        self.scene = {
-            "ros2": generateRos2(moveableAgents, self.dummyRobots),
-            "con": generateCon(),
-        }
+    @property
+    def teams(self):
+        return {0: self.team1, 1: self.team2}
 
-        RobotTacticList = [0] * 40
-        for robot in self.agentRobots:
-            RobotTacticList[robot] = RobotTactic.POLICY_CONTROL
+    @property
+    def moveableAgents(self):
+        return [*self.agentRobots, *self.BhumanRobots, *self.hijackedRobots]
 
-        for robot in self.dummyRobots:
-            RobotTacticList[robot] = RobotTactic.DUMMY
-
-        for robot in self.BhumanRobots:
-            RobotTacticList[robot] = RobotTactic.BHUMAN_CONTROL
-
-        for robot in self.hijackedRobots:
-            RobotTacticList[robot] = RobotTactic.STATIC_CONTROL
-
-        self.environmentVariables = {}
-        for robot in self.agentRobots:
-            self.environmentVariables[robot] = {
-                "PythonEnvPrefix": str(os.getpid()) + "_" if not DEBUG else "",
-                "RobotTacticList": RobotTacticList,
-                "RobotStateFlagArrayShmSize": len(self.agentRobots),
-                "ActionArrayShmSize": int(
-                    np.prod(self.action_space(self.possible_agents[robot]).shape)
-                ),
-                "ObsArrayShmSize": int(
-                    np.prod(self.observation_space(self.possible_agents[robot]).shape)
-                ),
-                "GroundTruthArrayShmSize": GROUND_TRUTH_SIZE,
-                "InitialPoseArrayShmSize": 6 * len(self.agentRobots),
-                "UpdatePeriod": 0.5,
-                "CalibrationPeriod": 100000,
-            }
+    @property
+    def allRobots(self):
+        return [
+            *self.agentRobots,
+            *self.dummyRobots,
+            *self.BhumanRobots,
+            *self.hijackedRobots,
+        ]
 
     def __init__(self, render_mode=None):
         """
@@ -174,7 +153,17 @@ class SimRobotEnv(AECEnv):
 
         These attributes should not be changed after initialization.
         """
+
         self.initialize_agents()
+
+        # Scene
+        self.sceneName = "PythonEnvGenerated"
+        self.logConFileName = "logCon"
+        self.team1Number = 5
+        self.team2Number = 70
+
+        # Simulator pid
+        self.simulator_pid = 0  # uninitialized
 
         self._action_spaces = {
             agent: Box(
@@ -188,6 +177,35 @@ class SimRobotEnv(AECEnv):
             agent: Box(low=-1, high=1, shape=(OBS_SIZE,))
             for agent in self.possible_agents
         }
+
+        RobotTacticList = [0] * 40
+        for robot in self.agentRobots:
+            RobotTacticList[robot] = RobotTactic.POLICY_CONTROL.value
+
+        for robot in self.dummyRobots:
+            RobotTacticList[robot] = RobotTactic.DUMMY.value
+
+        for robot in self.BhumanRobots:
+            RobotTacticList[robot] = RobotTactic.BHUMAN_CONTROL.value
+
+        for robot in self.hijackedRobots:
+            RobotTacticList[robot] = RobotTactic.STATIC_CONTROL.value
+
+        self.environmentVariables = {}
+        for robot in self.possible_agents:
+            self.environmentVariables[robot] = {
+                "PythonEnvPrefix": str(os.getpid()) + "_" if not DEBUG else "DEBUG_",
+                "RobotTacticList": RobotTacticList,
+                "RobotStateFlagArrayShmSize": len(self.agentRobots),
+                "ActionArrayShmSize": int(np.prod(self.action_space(robot).shape)),
+                "ObsArrayShmSize": int(np.prod(self.observation_space(robot).shape)),
+                "GroundTruthArrayShmSize": GROUND_TRUTH_SIZE,
+                "InitialPoseArrayShmSize": 6 * len(self.agentRobots),
+                "UpdatePeriod": 500,
+                "Team1Number": self.team1Number,
+                "Team2Number": self.team2Number,
+                "CalibrationPeriod": 100000,
+            }
 
         self.render_mode = render_mode
 
@@ -217,6 +235,33 @@ class SimRobotEnv(AECEnv):
         user is no longer using the environment.
         """
         pass
+
+    def writeScenes(self):
+        logConName = self.sceneName + "_LogConfiguration"
+        # Generate .ros2 file and .con file
+        self.scene = {
+            "ros2": generateRos2(
+                robots=self.moveableAgents,
+                dummyRobots=self.dummyRobots,
+                team1Number=self.team1Number,
+                team2Number=self.team2Number,
+            ),
+            "scene_con": generateSceneCon(logConName),
+            "log_con": generateLogCon(),
+        }
+        # Write the ros2 and con file
+        with open(
+            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
+        ) as ros2File:
+            ros2File.write(self.scene["ros2"])
+        with open(
+            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
+        ) as conFile:
+            conFile.write(self.scene["scene_con"])
+        with open(
+            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/Includes/{logConName}.con", "w"
+        ) as conFile:
+            conFile.write(self.scene["log_con"])
 
     def startSimRobot(self):
         if sys.platform.startswith("win"):
@@ -257,17 +302,7 @@ class SimRobotEnv(AECEnv):
 
             env = os.environ.copy()
 
-            env = {**env, **self.environmentVariables[self.possible_agents[0]]}
-
-            # Write the ros2 and con file
-            with open(
-                BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
-            ) as ros2File:
-                ros2File.write(self.scene["ros"])
-            with open(
-                BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
-            ) as conFile:
-                conFile.write(self.scene["con"])
+            env = {**env, **self.environmentVariables[self.possible_agents]}
 
             # TODO: change the output and error file name
             with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
@@ -300,11 +335,14 @@ class SimRobotEnv(AECEnv):
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
         # Reset simulator (If the simulator is not running, launch it)
-        if DEBUG:
-            self.simulator_pid = -1  # launch the simulator manually
-        elif self.simulator_pid == -1:
-            self.startSimRobot()
-        elif self.simulator_pid != -1 and is_zombie(self.simulator_pid):
+        if self.simulator_pid == 0:
+            self.writeScenes()
+            if DEBUG:
+                self.simulator_pid = -1  # launch the simulator manually
+            elif self.simulator_pid == -1:
+                self.startSimRobot()
+
+        if self.simulator_pid != -1 and is_zombie(self.simulator_pid):
             # Restart the simulator
             kill_process(self.simulator_pid)
             self.startSimRobot()
@@ -321,39 +359,53 @@ class SimRobotEnv(AECEnv):
         self.num_moves = 0
 
         # Wait until game state is "ready"
-        while not GameState.isReady(State(self.gameStateFlagShm[0])):
+        while not GameControllerState.STATE_READY == GameControllerState(
+            self.gameStateFlagShm[0]
+        ):
             pass
 
         # Calculate and send the reset pos
         initialRobotPoses: List[Point] = generatePoses(
-            opponentPenaltyArea, len(self.agentRobots), seed=0
+            opponentPenaltyArea, len(self.allRobots), seed=seed
         )
-        initialBasePose: Point = generatePoses(opponentGoalArea, 1, seed=0)[0]
+        initialBallPose: Point = generatePoses(opponentGoalArea, 1, seed=seed)[0]
 
         # Build the initial pose array
-        initialPosArray = []
-        for robotPos in initialRobotPoses:
+        purposedInitialPose = {"Ball": [initialBallPose.x, initialBallPose.y]}
+        for idx, robot in enumerate(self.allRobots):
+            robotPos = initialRobotPoses[idx]
             rot = math.atan2(
-                initialBasePose.y - robotPos.y, initialBasePose.x - robotPos.x
+                initialBallPose.y - robotPos.y, initialBallPose.x - robotPos.x
             )
-            initialPosArray += [robotPos.x, robotPos.y, 350.0, 0, 0, rot]
+            purposedInitialPose[str(robot)] = [
+                robotPos.x,
+                robotPos.y,
+                350.0,
+                0.0,
+                0.0,
+                rot,
+            ]
 
-        self.initialPoseArrayShm.sendArray(initialPosArray)
+        self.initialPoses.set(purposedInitialPose)
+        self.initialPosesShm.postCounterSem()
 
         # Wait until game state is "set"
-        while not GameState.isSet(State(self.gameStateFlagShm[0])):
+        while not GameControllerState.STATE_SET == GameControllerState(
+            self.gameStateFlagShm[0]
+        ):
             pass
 
         self._agent_selector = RobotSelector(
             self.possible_agents,
             {
-                agent: self.robotShmManagers[agent]["ObsArrayShm"]
-                for agent in self.possible_agents
+                self.possible_agents[idx]: self.robotShmManagers[agent]["ObsArrayShm"]
+                for idx, agent in enumerate(self.agentRobots)
             },
         )
 
         # This will wait until a robot return the first observation
         self.agent_selection = self._agent_selector.next()
+        print(f"Agent selection: {self.agent_selection}")
 
     def calcReward(self, groundTruth):
         """
@@ -415,8 +467,6 @@ class SimRobotEnv(AECEnv):
         # Perform new action
         agentActionShm = self.robotShmManagers[agent]["ActionArrayShm"]
         agentActionShm.sendArray(action)
-        while agentActionShm.probeSem() != 0:
-            pass  # Wait for action to be received by simulated robot
 
         if self._agent_selector.is_last():
             self.num_moves += 1
@@ -439,24 +489,38 @@ class SimRobotEnv(AECEnv):
         # selects the next agent.
         # 99% of the time, we will wait here
         self.agent_selection = self._agent_selector.next()
+        print(f"Agent selection: {self.agent_selection}")
 
     def openShm(self):
         if DEBUG:
-            pythonEnvPrefix = ""
+            pythonEnvPrefix = "DEBUG_"
         else:
             pythonEnvPID = os.getpid()
             pythonEnvPrefix = str(pythonEnvPID) + "_"
 
+        # Config shm (Switch to new TypedShmem communication module)
+        self.globalConfigShm = ShmemHeap(pythonEnvPrefix + "GlobalConfig")
+        self.globalConfigShm.create()
+        self.globalConfig = ShmemAccessor(self.globalConfigShm)
+
+        self.initialPosesShm = ShmemHeap(pythonEnvPrefix + "InitialPoses")
+        self.initialPosesShm.create()
+        self.initialPoses = ShmemAccessor(self.initialPosesShm)
+
+        self.globalConfig.set(self.environmentVariables[self.possible_agents[0]])
+
         # Global shm
         self.globalShmManager = SharedMemoryManager(
-            str(pythonEnvPID) if not DEBUG else "",
+            str(pythonEnvPID) if not DEBUG else "DEBUG",
             [
-                ("ActionUpdatedFlagArrayShm", (1,), SHM_VERBOSE),
+                (
+                    "ActionUpdatedFlagArrayShm",
+                    (len(self.agentRobots),),
+                    SHM_VERBOSE,
+                ),
                 ("RobotStateFlagArrayShm", (len(self.agentRobots),), SHM_VERBOSE),
                 ("GameStateFlagShm", (1,), SHM_VERBOSE),
-                ("InitialPoseArrayShm", (len(self.agentRobots) * 6,), SHM_VERBOSE),
             ],
-            pythonEnvPrefix == "",
         )
         # Alias of some global shm
         self.actionUpdatedFlagArrayShm = self.globalShmManager[
@@ -464,9 +528,10 @@ class SimRobotEnv(AECEnv):
         ]
         self.robotStateFlagArrayShm = self.globalShmManager["RobotStateFlagArrayShm"]
         self.gameStateFlagShm = self.globalShmManager["GameStateFlagShm"]
-        self.initialPoseArrayShm = self.globalShmManager["InitialPoseArrayShm"]
 
         self.globalShmManager.createTunnels()
+
+        self.actionUpdatedFlagArrayShm.sendArray([0] * len(self.possible_agents))
 
         # Robot individual shm
         self.robotShmManagers: Dict[int, SharedMemoryManager] = {

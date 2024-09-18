@@ -1,6 +1,3 @@
 [submodule "BadgerRLSystem"]
 	path = BadgerRLSystem
 	url = git@github.com:yli2565/BadgerRLSystem.git
-[submodule "TypedShmem"]
-	path = TypedShmem
-	url = git@github.com:yli2565/typedShmem.git
