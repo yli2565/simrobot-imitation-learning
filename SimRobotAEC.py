@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from typing import Dict, List
+from typing import Any, Dict, List
 from enum import Enum
 import gymnasium
 import numpy as np
@@ -86,16 +86,19 @@ class SimRobotEnv(AECEnv):
         # The agent number of a robot is its robot number - 1. For example, robot 1 is agent 0
 
         # Each robot is controlled by a RL agent
-        self.agentRobots = [4, 5, 24]  # Use PolicyControl
+        self.agentRobots = [5, 24]  # Use PolicyControl
         # Each dummy robot is just an obstacle. Their position can be set during reset
         self.dummyRobots = [1, 21]  # Play Dead
-        self.BhumanRobots = (
-            []
-        )  # TODO: Implement robots following Bhuman code # Use BHuman's control logic
-        self.hijackedRobots = (
-            []
-        )  # TODO: Implement robots following hard coded logic # Use Static Control
+        self.BhumanRobots = [
+            3,
+            23,
+        ]  # Robots following Bhuman code # Use BHuman's control logic
+        self.hijackedRobots = [
+            7,
+            27,
+        ]  # Robots following hard coded logic # Use Static Control logic in StaticControl.cpp
 
+        # Verification part
         set1, set2, set3, set4 = (
             set(self.agentRobots),
             set(self.dummyRobots),
@@ -129,7 +132,7 @@ class SimRobotEnv(AECEnv):
         return {0: self.team1, 1: self.team2}
 
     @property
-    def moveableAgents(self):
+    def moveableRobots(self):
         return [*self.agentRobots, *self.BhumanRobots, *self.hijackedRobots]
 
     @property
@@ -214,11 +217,11 @@ class SimRobotEnv(AECEnv):
         self.openShm()
 
         def interruptCallback():
+            if GameControllerState.STATE_READY == GameControllerState(
+                self.gameStateFlagShm[0]
+            ):
+                return True
             return False
-            # if GameControllerState.STATE_READY == GameControllerState(
-            #     self.gameStateFlagShm[0]
-            # ):
-            #     return True
 
         self.interruptCallback = interruptCallback
         self.rng = np.random.default_rng(55)
@@ -253,7 +256,7 @@ class SimRobotEnv(AECEnv):
         # Generate .ros2 file and .con file
         self.scene = {
             "ros2": generateRos2(
-                robots=self.moveableAgents,
+                robots=self.moveableRobots,
                 dummyRobots=self.dummyRobots,
                 team1Number=self.team1Number,
                 team2Number=self.team2Number,
@@ -361,11 +364,11 @@ class SimRobotEnv(AECEnv):
 
         # Reset data
         self.agents = self.possible_agents[:]
-        self.groundTruths = {agent: None for agent in self.agents}
         self.rewards = {agent: 0 for agent in self.agents}
         self._cumulative_rewards = {agent: 0 for agent in self.agents}
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
+        self.extendedInfos = {agent: None for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
         self.observations = {agent: None for agent in self.agents}
         self.num_moves = 0
@@ -405,16 +408,17 @@ class SimRobotEnv(AECEnv):
             ]
 
         self.initialPoses.set(purposedInitialPose)
-        self.initialPosesShm.postCounterSem()
 
         # Wait until game state is "set" (all robots are move to the correct initial position)
         while not GameControllerState.STATE_SET == GameControllerState(
             self.gameStateFlagShm[0]
         ):
+            if self.initialPosesShm.getCounterSemValue()==0:
+                self.initialPosesShm.postCounterSem()
             pass
 
         self._agent_selector = RobotSelector(
-            self.possible_agents,
+            self.agents,
             {
                 agent: self.robotShmManagers[agent]["ActionRequestFlagShm"]
                 for agent in self.agentRobots
@@ -424,7 +428,7 @@ class SimRobotEnv(AECEnv):
 
         # This will wait until a robot return the first observation
         self.agent_selection = self._agent_selector.next()
-        print(f"Agent selection: {self.agent_selection}")
+        print(f"Reset Agent selection: {self.agent_selection}")
 
     def calcReward(self, groundTruth):
         """
@@ -439,13 +443,19 @@ class SimRobotEnv(AECEnv):
         at any time after reset() is called.
         """
         # Fetch the corresponding observation array from shared memory
-        observation = self.robotShmManagers[agent]["ObsArrayShm"].probeArray()
-        self.observations[agent] = observation
-        # Fetch ground truth / reward from SimRobot and set robot's reward
-        groundTruth = self.robotShmManagers[agent]["GroundTruthArrayShm"].probeArray()
-        self.groundTruths[agent] = groundTruth
+        obsShm = self.robotShmManagers[agent]["ObsArrayShm"]
 
-        return np.array(observation)
+        # Wait for observation when: fetching very first observation, else use old observation
+        if obsShm.probeSem() != 0 or self.observations[agent] is None:
+            observation = obsShm.probeArray()
+            self.observations[agent] = observation
+
+        # Fetch extended info
+        while self.robotExtendedInfoShmems[agent].postCounterSem() == 0:
+            pass
+        self.extendedInfos[agent] = self.robotExtendedInfos[agent].fetch()
+        print(self.extendedInfos[agent])
+        return self.observations[agent]
 
     def step(self, action):
         """
@@ -464,17 +474,26 @@ class SimRobotEnv(AECEnv):
             self.terminations[self.agent_selection]
             or self.truncations[self.agent_selection]
         ):
+            oldagent = self.agent_selection
             self._was_dead_step(action)
+            print(
+                "Remove agent {}, current selection {}".format(
+                    oldagent, self.agent_selection
+                )
+            )
             return
 
         agent = self.agent_selection
 
         # Calculate reward
-        groundTruth = self.groundTruths[agent]
-        self.rewards[agent] = self.calcReward(groundTruth)
+        extendedInfo = self.extendedInfos[agent]
+        print("Robot {} ExtendedInfo: {}".format(self.agent_selection, extendedInfo))
+        self.rewards[agent] = self.calcReward(extendedInfo["GroundTruth"])
 
-        robotGameControllerStatePerception = GameControllerState(groundTruth[1])
-        groundTruthGameState = State(groundTruth[0])
+        robotGameControllerStatePerception = GameControllerState(
+            extendedInfo["GameControllerState"]
+        )
+        gameStatePerception = State(extendedInfo["GameState"])
 
         if GameControllerState.STATE_READY == robotGameControllerStatePerception:
             print(
@@ -484,13 +503,14 @@ class SimRobotEnv(AECEnv):
             )
             self.terminations[self.agent_selection] = True
 
-        if not GameState.isPlaying(groundTruthGameState):
+        if not GameState.isPlaying(gameStatePerception):
             print(
                 "Robot {} terminate because of {}".format(
                     self.agent_selection, "RobotGameState"
                 )
             )
             self.terminations[self.agent_selection] = True
+
         # Update termination / truncation according to ground truth
         # groundTruthGameState = State(groundTruth[0])
         # if not GameState.isPlaying(groundTruthGameState):
@@ -574,6 +594,17 @@ class SimRobotEnv(AECEnv):
             for robot in self.agentRobots
         }
 
+        self.robotExtendedInfoShmems: Dict[Any, ShmemHeap] = {
+            robot: ShmemHeap(
+                pythonEnvPrefix + "robot" + str(robot) + "_" + "ExtendedInfo"
+            )
+            for robot in self.agentRobots
+        }
+        self.robotExtendedInfos: Dict[Any, ShmemAccessor] = {
+            robot: ShmemAccessor(self.robotExtendedInfoShmems[robot])
+            for robot in self.agentRobots
+        }
+
     def openShm(self):
         self.globalConfigShm.create()
         self.initialPosesShm.create()
@@ -586,6 +617,8 @@ class SimRobotEnv(AECEnv):
 
         for robot in self.agentRobots:
             self.robotShmManagers[robot].createTunnels()
+            self.robotExtendedInfoShmems[robot].create()
+            self.robotExtendedInfoShmems[robot].postCounterSem()
 
     def closeShm(self):
         self.globalShmManager.close()
@@ -593,5 +626,35 @@ class SimRobotEnv(AECEnv):
         for robot in self.robots:
             self.robotShmManagers[robot].close()
             self.robotShmManagers[robot].unlink()
+
+    def _was_dead_step(self, action) -> None:
+        if action is not None:
+            raise ValueError("when an agent is dead, the only valid action is None")
+
+        # removes dead agent
+        agent = self.agent_selection
+        assert (
+            self.terminations[agent] or self.truncations[agent]
+        ), "an agent that was not dead as attempted to be removed"
+        del self.terminations[agent]
+        del self.truncations[agent]
+        del self.rewards[agent]
+        del self._cumulative_rewards[agent]
+        del self.infos[agent]
+        self.agents.remove(agent)
+
+        # finds next dead agent or loads next live agent (Stored in _skip_agent_selection)
+        _deads_order = [
+            agent
+            for agent in self.agents
+            if (self.terminations[agent] or self.truncations[agent])
+        ]
+        if _deads_order:
+            if getattr(self, "_skip_agent_selection", None) is None:
+                self._skip_agent_selection = self.agent_selection
+            self.agent_selection = _deads_order[0]
+        else:
+            self.agent_selection = self._agent_selector.next()
+        self._clear_rewards()
 
     # def clearShm(self):

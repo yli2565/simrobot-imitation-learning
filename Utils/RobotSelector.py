@@ -30,14 +30,14 @@ class RobotSelector(agent_selector):
         robotObsShms: Dict[Any, SharedMemoryHelper],
         interruptCallback=lambda: False,
     ):
-        self.possibleAgents: Set[Any] = set(possibleAgents)
+        self.possibleAgents: List[Any] = possibleAgents
         self.robotActionRequestFlagShms: Dict[SharedMemoryHelper] = robotObsShms
         self.interruptCallback = interruptCallback
         self.reinit()
 
     def reinit(self) -> None:
         """Recover the agent pool to indicate a new round"""
-        self.agentPool = self.possibleAgents.copy()
+        self.agentPool: List[Any] = self.possibleAgents.copy()
 
     def reset(self) -> Any:
         """Reset to the original order."""
@@ -49,17 +49,24 @@ class RobotSelector(agent_selector):
         if len(self.agentPool) == 0:
             self.reinit()
 
-        currentAgentPool = list(self.agentPool)
-        poolSize = len(currentAgentPool)
+        # Just in case some agent get removed
+        self.agentPool = list(
+            set(self.agentPool).intersection(set(self.possibleAgents))
+        )
+        poolSize = len(self.agentPool)
         selectRobotIdx = 0
-        while selectRobotIdx < len(currentAgentPool):
-            robot = currentAgentPool[selectRobotIdx]
+        if poolSize == 0:
+            raise ValueError("Empty pool")
+        while selectRobotIdx < len(self.agentPool):
+            if poolSize != len(self.agentPool):
+                return self.next()
+            robot = self.agentPool[selectRobotIdx]
             if (
                 self.robotActionRequestFlagShms[robot].probeSem() > 0
             ):  # This means that the robot need an action
                 break
             if self.interruptCallback():
-                break # Just randomly pick one robot
+                break  # Just randomly pick one robot
             selectRobotIdx = (selectRobotIdx + 1) % poolSize
         self.agentPool.remove(robot)
         self.selected_agent = robot
