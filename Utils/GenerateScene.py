@@ -52,7 +52,6 @@ for Cognition dr representation:GlobalOpponentsModel
 for Cognition dr representation:GlobalTeammatesModel
 for Cognition dr representation:IMUCalibration
 for Cognition dr representation:HeadMotionRequest
-for Cognition dr representation:MotionInfo
 for Cognition dr representation:MotionRequest
 for Cognition dr representation:ObstacleModel
 for Cognition dr representation:OdometryData
@@ -65,7 +64,6 @@ for Cognition dr representation:SkillRequest
 for Cognition dr representation:StrategyStatus
 for Cognition dr representation:TeammatesBallModel
 for Cognition dr representation:TeamData
-for Cognition dr representation:WalkStepData
 for Cognition dr representation:WalkingEngineOutput
 for Motion dr representation:FallDownState
 for Motion dr representation:FootOffset
@@ -265,14 +263,14 @@ ROS2_SAMPLE = """
 """
 ROBOT_SAMPLE = """
     <Body ref="Nao" name="robot{robot_id}">
-      <Translation x="{x}" y="{y}" z="320mm"/>
+      <Translation x="{x}cm" y="{y}cm" z="320mm"/>
       <Rotation z="{rotation}degree"/>
       <Set name="NaoColor" value="{color}"/>
     </Body>
 """
 DUMMY_ROBOT_SAMPLE = """
     <Body ref="NaoDummy" name="robot{robot_id}">
-      <Translation x="{x}" y="{y}" z="320mm"/>
+      <Translation x="{x}cm" y="{y}cm" z="320mm"/>
       <Rotation z="{rotation}degree"/>
       <Set name="NaoColor" value="{color}"/>
     </Body>
@@ -295,42 +293,44 @@ def generateRos2(
     team2GoalieColor=TEAM2_GOALIE_COLOR,
 ):
     robotsXML = ""
-    for robot in robots:
+    for idx,robot in enumerate(robots):
+        idx+=1
         if robot == 1:
             robotsXML += ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team1GoalieColor
+                robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team1GoalieColor
             )
         elif robot in range(2, 20):
             robotsXML += ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team1Color
+                robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team1Color
             )
         elif robot == 21:
             robotsXML += ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team2GoalieColor
+                robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team2GoalieColor
             )
         elif robot in range(20, 40):
             robotsXML += ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team2Color
+                robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team2Color
             )
         else:
             raise Exception("Invalid robot number")
     dummyRobotsXML = ""
-    for robot in dummyRobots:
+    for idx,robot in enumerate(dummyRobots):
+        idx+=1
         if robot == 1:
             dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team1GoalieColor
+                robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team1GoalieColor
             )
         elif robot in range(2, 20):
             dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team1Color
+                robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team1Color
             )
         elif robot == 21:
             dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team2GoalieColor
+                robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team2GoalieColor
             )
         elif robot in range(20, 40):
             dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
-                robot_id=robot, x=0, y=0, rotation=0, color=team2Color
+                robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team2Color
             )
         else:
             raise Exception("Invalid dummy robot number")

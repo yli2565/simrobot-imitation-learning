@@ -25,10 +25,14 @@ class RobotSelector(agent_selector):
     """
 
     def __init__(
-        self, possibleAgents: List[Any], robotObsShms: Dict[Any,SharedMemoryHelper]
+        self,
+        possibleAgents: List[Any],
+        robotObsShms: Dict[Any, SharedMemoryHelper],
+        interruptCallback=lambda: False,
     ):
         self.possibleAgents: Set[Any] = set(possibleAgents)
-        self.robotObsShms: Dict[SharedMemoryHelper] = robotObsShms
+        self.robotActionRequestFlagShms: Dict[SharedMemoryHelper] = robotObsShms
+        self.interruptCallback = interruptCallback
         self.reinit()
 
     def reinit(self) -> None:
@@ -50,10 +54,13 @@ class RobotSelector(agent_selector):
         selectRobotIdx = 0
         while selectRobotIdx < len(currentAgentPool):
             robot = currentAgentPool[selectRobotIdx]
-            if self.robotObsShms[robot].probeSem() > 0:
+            if (
+                self.robotActionRequestFlagShms[robot].probeSem() > 0
+            ):  # This means that the robot need an action
                 break
+            if self.interruptCallback():
+                break # Just randomly pick one robot
             selectRobotIdx = (selectRobotIdx + 1) % poolSize
-
         self.agentPool.remove(robot)
         self.selected_agent = robot
         return self.selected_agent

@@ -96,9 +96,10 @@ def Random_Points_in_Bounds(geometry, num_points, random_generator):
     return x, y
 
 
-def generatePoses(geometry, numPoses, seed=None):
+def generatePoses(geometry, numPoses, rng=None, seed=None):
     # Initialize the random number generator with the provided seed
-    rng = np.random.default_rng(seed)
+    if rng is None:
+        rng = np.random.default_rng(seed)
 
     gdf_poly = gpd.GeoDataFrame(index=["myPoly"], geometry=[geometry])
 

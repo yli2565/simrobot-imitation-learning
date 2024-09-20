@@ -276,9 +276,10 @@ class SharedMemoryHelper:
         else:
             for idx, value in enumerate(array):
                 self.array[offset + idx] = value
+        oldSemVal = self.sem.value
         self.sem.release()
         self.vPrint(
-            f"Sent array in {self.name}: {list(array)}, Sem: {self.sem.value-1}->{self.sem.value}",
+            f"Sent array in {self.name}: {list(array)}, Sem: {oldSemVal}->{oldSemVal+1}",
             2,
         )
 

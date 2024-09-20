@@ -10,6 +10,7 @@ import gymnasium
 import numpy as np
 from gymnasium.spaces import Discrete
 from gymnasium.spaces import Box
+from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager, RandomPolicy
 
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
@@ -209,7 +210,18 @@ class SimRobotEnv(AECEnv):
 
         self.render_mode = render_mode
 
+        self.configShm()
         self.openShm()
+
+        def interruptCallback():
+            return False
+            # if GameControllerState.STATE_READY == GameControllerState(
+            #     self.gameStateFlagShm[0]
+            # ):
+            #     return True
+
+        self.interruptCallback = interruptCallback
+        self.rng = np.random.default_rng(55)
 
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
@@ -364,14 +376,20 @@ class SimRobotEnv(AECEnv):
         ):
             pass
 
+        initialRobotPoses: List[Point] = []
         # Calculate and send the reset pos
-        initialRobotPoses: List[Point] = generatePoses(
-            opponentPenaltyArea, len(self.allRobots), seed=seed
-        )
+        if seed:
+            initialRobotPoses = generatePoses(
+                opponentPenaltyArea, len(self.allRobots), seed=seed
+            )
+        else:
+            initialRobotPoses = generatePoses(
+                opponentPenaltyArea, len(self.allRobots), rng=self.rng
+            )
         initialBallPose: Point = generatePoses(opponentGoalArea, 1, seed=seed)[0]
 
         # Build the initial pose array
-        purposedInitialPose = {"Ball": [initialBallPose.x, initialBallPose.y]}
+        purposedInitialPose = {"Ball": [initialBallPose.x, initialBallPose.y, 50.0]}
         for idx, robot in enumerate(self.allRobots):
             robotPos = initialRobotPoses[idx]
             rot = math.atan2(
@@ -389,7 +407,7 @@ class SimRobotEnv(AECEnv):
         self.initialPoses.set(purposedInitialPose)
         self.initialPosesShm.postCounterSem()
 
-        # Wait until game state is "set"
+        # Wait until game state is "set" (all robots are move to the correct initial position)
         while not GameControllerState.STATE_SET == GameControllerState(
             self.gameStateFlagShm[0]
         ):
@@ -398,9 +416,10 @@ class SimRobotEnv(AECEnv):
         self._agent_selector = RobotSelector(
             self.possible_agents,
             {
-                self.possible_agents[idx]: self.robotShmManagers[agent]["ObsArrayShm"]
-                for idx, agent in enumerate(self.agentRobots)
+                agent: self.robotShmManagers[agent]["ActionRequestFlagShm"]
+                for agent in self.agentRobots
             },
+            self.interruptCallback,
         )
 
         # This will wait until a robot return the first observation
@@ -420,10 +439,10 @@ class SimRobotEnv(AECEnv):
         at any time after reset() is called.
         """
         # Fetch the corresponding observation array from shared memory
-        observation = self.robotShmManagers[agent]["ObsArrayShm"].fetchArray()
+        observation = self.robotShmManagers[agent]["ObsArrayShm"].probeArray()
         self.observations[agent] = observation
         # Fetch ground truth / reward from SimRobot and set robot's reward
-        groundTruth = self.robotShmManagers[agent]["GroundTruthArrayShm"].fetchArray()
+        groundTruth = self.robotShmManagers[agent]["GroundTruthArrayShm"].probeArray()
         self.groundTruths[agent] = groundTruth
 
         return np.array(observation)
@@ -454,19 +473,34 @@ class SimRobotEnv(AECEnv):
         groundTruth = self.groundTruths[agent]
         self.rewards[agent] = self.calcReward(groundTruth)
 
-        # Update termination / truncation according to ground truth
-        # TODO: make this correct
+        robotGameControllerStatePerception = GameControllerState(groundTruth[1])
         groundTruthGameState = State(groundTruth[0])
-        if not GameState.isPlaying(groundTruthGameState):
+
+        if GameControllerState.STATE_READY == robotGameControllerStatePerception:
+            print(
+                "Robot {} terminate because of {}".format(
+                    self.agent_selection, "GameControllerState"
+                )
+            )
             self.terminations[self.agent_selection] = True
 
-        # If a robot is penalized, truncation is true
-        if GameState.isPenalized(groundTruthGameState):
-            self.truncations[self.agent_selection] = True
+        if not GameState.isPlaying(groundTruthGameState):
+            print(
+                "Robot {} terminate because of {}".format(
+                    self.agent_selection, "RobotGameState"
+                )
+            )
+            self.terminations[self.agent_selection] = True
+        # Update termination / truncation according to ground truth
+        # groundTruthGameState = State(groundTruth[0])
+        # if not GameState.isPlaying(groundTruthGameState):
+        #     self.truncations[self.agent_selection] = True
 
         # Perform new action
         agentActionShm = self.robotShmManagers[agent]["ActionArrayShm"]
+        agentActionRequestFlagShm = self.robotShmManagers[agent]["ActionRequestFlagShm"]
         agentActionShm.sendArray(action)
+        agentActionRequestFlagShm.clearSem()  # Respond to the request
 
         if self._agent_selector.is_last():
             self.num_moves += 1
@@ -487,27 +521,24 @@ class SimRobotEnv(AECEnv):
         #     self.render()
 
         # selects the next agent.
-        # 99% of the time, we will wait here
-        self.agent_selection = self._agent_selector.next()
-        print(f"Agent selection: {self.agent_selection}")
+        # 99% of the time, we will wait here for the action request from the robot
+        # If all robots are terminated, no need to wait
+        if not all(self.terminations.values()):
+            self.agent_selection = self._agent_selector.next()
+            print(f"Agent selection: {self.agent_selection}")
 
-    def openShm(self):
+    def configShm(self):
         if DEBUG:
             pythonEnvPrefix = "DEBUG_"
         else:
             pythonEnvPID = os.getpid()
             pythonEnvPrefix = str(pythonEnvPID) + "_"
 
-        # Config shm (Switch to new TypedShmem communication module)
         self.globalConfigShm = ShmemHeap(pythonEnvPrefix + "GlobalConfig")
-        self.globalConfigShm.create()
         self.globalConfig = ShmemAccessor(self.globalConfigShm)
 
         self.initialPosesShm = ShmemHeap(pythonEnvPrefix + "InitialPoses")
-        self.initialPosesShm.create()
         self.initialPoses = ShmemAccessor(self.initialPosesShm)
-
-        self.globalConfig.set(self.environmentVariables[self.possible_agents[0]])
 
         # Global shm
         self.globalShmManager = SharedMemoryManager(
@@ -529,15 +560,12 @@ class SimRobotEnv(AECEnv):
         self.robotStateFlagArrayShm = self.globalShmManager["RobotStateFlagArrayShm"]
         self.gameStateFlagShm = self.globalShmManager["GameStateFlagShm"]
 
-        self.globalShmManager.createTunnels()
-
-        self.actionUpdatedFlagArrayShm.sendArray([0] * len(self.possible_agents))
-
         # Robot individual shm
         self.robotShmManagers: Dict[int, SharedMemoryManager] = {
             robot: SharedMemoryManager(
                 pythonEnvPrefix + "robot" + str(robot),
                 [
+                    ("ActionRequestFlagShm", (1,), SHM_VERBOSE),
                     ("ObsArrayShm", (OBS_SIZE,), SHM_VERBOSE),
                     ("ActionArrayShm", (ACT_SIZE,), SHM_VERBOSE),
                     ("GroundTruthArrayShm", (GROUND_TRUTH_SIZE,), SHM_VERBOSE),
@@ -545,6 +573,16 @@ class SimRobotEnv(AECEnv):
             )
             for robot in self.agentRobots
         }
+
+    def openShm(self):
+        self.globalConfigShm.create()
+        self.initialPosesShm.create()
+
+        self.globalConfig.set(self.environmentVariables[self.possible_agents[0]])
+
+        self.globalShmManager.createTunnels()
+
+        self.actionUpdatedFlagArrayShm.sendArray([0] * len(self.possible_agents))
 
         for robot in self.agentRobots:
             self.robotShmManagers[robot].createTunnels()
