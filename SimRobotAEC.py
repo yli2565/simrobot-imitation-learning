@@ -10,6 +10,7 @@ import gymnasium
 import numpy as np
 from gymnasium.spaces import Discrete
 from gymnasium.spaces import Box
+import shapely
 from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager, RandomPolicy
 
 from pettingzoo import AECEnv
@@ -31,8 +32,8 @@ from Utils import (
     generateLogCon,
     RobotSelector,
     generatePoses,
-    opponentPenaltyArea,
-    opponentGoalArea,
+    SoccerFieldAreas,
+    SoccerFieldPoints,
 )
 
 # these paths must match the ones used by the c++ code
@@ -121,11 +122,11 @@ class SimRobotEnv(AECEnv):
     # Helper fields
     @property
     def team1(self):
-        return list(filter(lambda x: 0 < x < 20, self.agentRobots))
+        return list(filter(lambda x: 0 < x < 20, self.allRobots))
 
     @property
     def team2(self):
-        return list(filter(lambda x: 20 < x < 40, self.agentRobots))
+        return list(filter(lambda x: 20 < x < 40, self.allRobots))
 
     @property
     def teams(self):
@@ -335,6 +336,63 @@ class SimRobotEnv(AECEnv):
         self.simulator_pid = process.pid
         return
 
+    def resetBallAndRobotPositions(self, seed=None):
+        """
+        Sample usage of generatePoses()
+        Here we initialize all robots in their penalty area, but only the goalie should be in goal area
+        """
+        purposedInitialPose: Dict[str, Point] = {}
+
+        if seed is not None:
+            rng = np.random.default_rng(seed)
+        else:
+            rng = self.rng
+
+        initialBallPose: Point = generatePoses(
+            SoccerFieldAreas.centerCircle, 1, rng=rng
+        )[0]
+
+        area = SoccerFieldAreas.ownPenaltyArea.difference(SoccerFieldAreas.ownGoalArea)
+        candidatePos: List[Point] = generatePoses(area, len(self.team1), rng=rng)
+
+        for robot in self.team1:
+            if robot == 1:
+                purposedInitialPose[str(robot)] = generatePoses(
+                    SoccerFieldAreas.ownGoalArea, 1, rng=rng
+                )[0]
+            else:
+                purposedInitialPose[str(robot)] = candidatePos.pop()
+
+        area = SoccerFieldAreas.opponentPenaltyArea.difference(
+            SoccerFieldAreas.opponentGoalArea
+        )
+        candidatePos = generatePoses(area, len(self.team2), rng=rng)
+
+        for robot in self.team2:
+            if robot == 21:
+                purposedInitialPose[str(robot)] = generatePoses(
+                    SoccerFieldAreas.opponentGoalArea, 1, rng=rng
+                )[0]
+            else:
+                purposedInitialPose[str(robot)] = candidatePos.pop()
+
+        # assign rotation
+        for robot, robotPos in purposedInitialPose.items():
+            rot = math.atan2(
+                initialBallPose.y - robotPos.y, initialBallPose.x - robotPos.x
+            )
+            purposedInitialPose[robot] = [
+                robotPos.x,
+                robotPos.y,
+                350.0,
+                0.0,
+                0.0,
+                rot,
+            ]
+        purposedInitialPose["Ball"] = [initialBallPose.x, initialBallPose.y, 50.0]
+
+        return purposedInitialPose
+
     def reset(self, seed=None, options=None):
         """
         Reset needs to initialize the following attributes
@@ -379,33 +437,7 @@ class SimRobotEnv(AECEnv):
         ):
             pass
 
-        initialRobotPoses: List[Point] = []
-        # Calculate and send the reset pos
-        if seed:
-            initialRobotPoses = generatePoses(
-                opponentPenaltyArea, len(self.allRobots), seed=seed
-            )
-        else:
-            initialRobotPoses = generatePoses(
-                opponentPenaltyArea, len(self.allRobots), rng=self.rng
-            )
-        initialBallPose: Point = generatePoses(opponentGoalArea, 1, seed=seed)[0]
-
-        # Build the initial pose array
-        purposedInitialPose = {"Ball": [initialBallPose.x, initialBallPose.y, 50.0]}
-        for idx, robot in enumerate(self.allRobots):
-            robotPos = initialRobotPoses[idx]
-            rot = math.atan2(
-                initialBallPose.y - robotPos.y, initialBallPose.x - robotPos.x
-            )
-            purposedInitialPose[str(robot)] = [
-                robotPos.x,
-                robotPos.y,
-                350.0,
-                0.0,
-                0.0,
-                rot,
-            ]
+        purposedInitialPose = self.resetBallAndRobotPositions(seed=seed)
 
         self.initialPoses.set(purposedInitialPose)
 
@@ -413,7 +445,7 @@ class SimRobotEnv(AECEnv):
         while not GameControllerState.STATE_SET == GameControllerState(
             self.gameStateFlagShm[0]
         ):
-            if self.initialPosesShm.getCounterSemValue()==0:
+            if self.initialPosesShm.getCounterSemValue() == 0:
                 self.initialPosesShm.postCounterSem()
             pass
 
@@ -451,7 +483,7 @@ class SimRobotEnv(AECEnv):
             self.observations[agent] = observation
 
         # Fetch extended info
-        while self.robotExtendedInfoShmems[agent].postCounterSem() == 0:
+        while self.robotExtendedInfoShmems[agent].getCounterSemValue() == 0:
             pass
         self.extendedInfos[agent] = self.robotExtendedInfos[agent].fetch()
         print(self.extendedInfos[agent])

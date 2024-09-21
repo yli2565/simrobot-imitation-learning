@@ -14,78 +14,83 @@ fieldData = cfg2dict(
 )
 # Create Shapely objects for the field and important areas
 
-fieldBoundary = box(
-    fieldData["xPosOwnFieldBorder"],
-    fieldData["yPosRightFieldBorder"],
-    fieldData["xPosOpponentFieldBorder"],
-    fieldData["yPosLeftFieldBorder"],
-)
 
-ownHalf = box(
-    fieldData["xPosOwnGroundLine"],
-    fieldData["yPosRightSideline"],
-    fieldData["xPosHalfWayLine"],
-    fieldData["yPosLeftSideline"],
-)
+class SoccerFieldPoints:
+    centerSpot: Point = Point(0, 0)
+    ownPenaltyMark: Point = Point(fieldData["xPosOwnPenaltyMark"], 0)
+    opponentPenaltyMark: Point = Point(fieldData["xPosOpponentPenaltyMark"], 0)
+    ownLeftGoalPost: Point = Point(
+        fieldData["xPosOwnGoalPost"], fieldData["yPosLeftGoal"]
+    )
+    ownRightGoalPost: Point = Point(
+        fieldData["xPosOwnGoalPost"], fieldData["yPosRightGoal"]
+    )
+    opponentLeftGoalPost: Point = Point(
+        fieldData["xPosOpponentGoalPost"], fieldData["yPosLeftGoal"]
+    )
+    opponentRightGoalPost: Point = Point(
+        fieldData["xPosOpponentGoalPost"], fieldData["yPosRightGoal"]
+    )
 
-opponentHalf = box(
-    fieldData["xPosHalfWayLine"],
-    fieldData["yPosRightSideline"],
-    fieldData["xPosOpponentGroundLine"],
-    fieldData["yPosLeftSideline"],
-)
 
-ownPenaltyArea = box(
-    fieldData["xPosOwnGroundLine"],
-    fieldData["yPosRightPenaltyArea"],
-    fieldData["xPosOwnPenaltyArea"],
-    fieldData["yPosLeftPenaltyArea"],
-)
+class SoccerFieldAreas:
+    fieldBoundary: Polygon = box(
+        fieldData["xPosOwnFieldBorder"],
+        fieldData["yPosRightFieldBorder"],
+        fieldData["xPosOpponentFieldBorder"],
+        fieldData["yPosLeftFieldBorder"],
+    )
+    ownHalf: Polygon = box(
+        fieldData["xPosOwnGroundLine"],
+        fieldData["yPosRightSideline"],
+        fieldData["xPosHalfWayLine"],
+        fieldData["yPosLeftSideline"],
+    )
+    opponentHalf: Polygon = box(
+        fieldData["xPosHalfWayLine"],
+        fieldData["yPosRightSideline"],
+        fieldData["xPosOpponentGroundLine"],
+        fieldData["yPosLeftSideline"],
+    )
+    ownPenaltyArea: Polygon = box(
+        fieldData["xPosOwnGroundLine"],
+        fieldData["yPosRightPenaltyArea"],
+        fieldData["xPosOwnPenaltyArea"],
+        fieldData["yPosLeftPenaltyArea"],
+    )
+    opponentPenaltyArea: Polygon = box(
+        fieldData["xPosOpponentPenaltyArea"],
+        fieldData["yPosRightPenaltyArea"],
+        fieldData["xPosOpponentGroundLine"],
+        fieldData["yPosLeftPenaltyArea"],
+    )
+    ownGoalArea: Polygon = box(
+        fieldData["xPosOwnGroundLine"],
+        fieldData["yPosRightGoalArea"],
+        fieldData["xPosOwnGoalArea"],
+        fieldData["yPosLeftGoalArea"],
+    )
+    opponentGoalArea: Polygon = box(
+        fieldData["xPosOpponentGoalArea"],
+        fieldData["yPosRightGoalArea"],
+        fieldData["xPosOpponentGroundLine"],
+        fieldData["yPosLeftGoalArea"],
+    )
+    centerCircle: Polygon = SoccerFieldPoints.centerSpot.buffer(
+        fieldData["centerCircleRadius"]
+    )
+    ownHalfCenterCircle: Polygon = centerCircle.intersection(ownHalf)
+    opponentHalfCenterCircle: Polygon = centerCircle.intersection(opponentHalf)
 
-opponentPenaltyArea = box(
-    fieldData["xPosOpponentPenaltyArea"],
-    fieldData["yPosRightPenaltyArea"],
-    fieldData["xPosOpponentGroundLine"],
-    fieldData["yPosLeftPenaltyArea"],
-)
-
-ownGoalArea = box(
-    fieldData["xPosOwnGroundLine"],
-    fieldData["yPosRightGoalArea"],
-    fieldData["xPosOwnGoalArea"],
-    fieldData["yPosLeftGoalArea"],
-)
-
-opponentGoalArea = box(
-    fieldData["xPosOpponentGoalArea"],
-    fieldData["yPosRightGoalArea"],
-    fieldData["xPosOpponentGroundLine"],
-    fieldData["yPosLeftGoalArea"],
-)
-
-centerCircle = Point(0, 0).buffer(fieldData["centerCircleRadius"])
-
-# Create important points
-centerSpot = Point(0, 0)
-ownPenaltyMark = Point(fieldData["xPosOwnPenaltyMark"], 0)
-opponentPenaltyMark = Point(fieldData["xPosOpponentPenaltyMark"], 0)
-ownLeftGoalPost = Point(fieldData["xPosOwnGoalPost"], fieldData["yPosLeftGoal"])
-ownRightGoalPost = Point(fieldData["xPosOwnGoalPost"], fieldData["yPosRightGoal"])
-opponentLeftGoalPost = Point(
-    fieldData["xPosOpponentGoalPost"], fieldData["yPosLeftGoal"]
-)
-opponentRightGoalPost = Point(
-    fieldData["xPosOpponentGoalPost"], fieldData["yPosRightGoal"]
-)
 
 importantPoints = [
-    centerSpot,
-    ownPenaltyMark,
-    opponentPenaltyMark,
-    ownLeftGoalPost,
-    ownRightGoalPost,
-    opponentLeftGoalPost,
-    opponentRightGoalPost,
+    SoccerFieldPoints.centerSpot,
+    SoccerFieldPoints.ownPenaltyMark,
+    SoccerFieldPoints.opponentPenaltyMark,
+    SoccerFieldPoints.ownLeftGoalPost,
+    SoccerFieldPoints.ownRightGoalPost,
+    SoccerFieldPoints.opponentLeftGoalPost,
+    SoccerFieldPoints.opponentRightGoalPost,
 ]
 
 
@@ -138,19 +143,21 @@ def visualizeField(highlightArea=None, randomPoses=None):
 
     # Plot field boundary
     boundary = PlotPolygon(
-        list(fieldBoundary.exterior.coords), facecolor="lightgreen", edgecolor="black"
+        list(SoccerFieldAreas.fieldBoundary.exterior.coords),
+        facecolor="lightgreen",
+        edgecolor="black",
     )
     ax.add_patch(boundary)
 
     # Plot areas
     areas = [
-        (centerCircle, "black", 0.5),
-        (ownHalf, "blue", 0.1),
-        (opponentHalf, "red", 0.1),
-        (ownPenaltyArea, "blue", 0.2),
-        (opponentPenaltyArea, "red", 0.2),
-        (ownGoalArea, "blue", 0.3),
-        (opponentGoalArea, "red", 0.3),
+        (SoccerFieldPoints.centerCircle, "black", 0.5),
+        (SoccerFieldPoints.ownHalf, "blue", 0.1),
+        (SoccerFieldPoints.opponentHalf, "red", 0.1),
+        (SoccerFieldPoints.ownPenaltyArea, "blue", 0.2),
+        (SoccerFieldPoints.opponentPenaltyArea, "red", 0.2),
+        (SoccerFieldPoints.ownGoalArea, "blue", 0.3),
+        (SoccerFieldPoints.opponentGoalArea, "red", 0.3),
     ]
 
     for area, color, alpha in areas:
@@ -192,13 +199,16 @@ def visualizeField(highlightArea=None, randomPoses=None):
 if __name__ == "__main__":
     # Example usage
     print("Random poses in the entire field:")
-    fieldPoses = generatePoses(unary_union([ownPenaltyArea, centerCircle]), 20)
+    fieldPoses = generatePoses(
+        unary_union([SoccerFieldAreas.ownPenaltyArea, SoccerFieldAreas.centerCircle]),
+        20,
+    )
     print(fieldPoses)
     visualizeField(randomPoses=fieldPoses)
 
     # print("\nRandom poses in own penalty area:")
-    # ownPenaltyPoses = generatePoses(ownPenaltyArea, 10)
+    # ownPenaltyPoses = generatePoses(SoccerFieldAreas.ownPenaltyArea, 10)
     # print(ownPenaltyPoses)
-    # visualizeField(highlightArea=ownPenaltyArea, randomPoses=ownPenaltyPoses)
+    # visualizeField(highlightArea=SoccerFieldAreas.ownPenaltyArea, randomPoses=ownPenaltyPoses)
 
     # You can test other areas similarly
