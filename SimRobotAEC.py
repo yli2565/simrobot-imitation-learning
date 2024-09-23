@@ -65,7 +65,7 @@ class RobotTactic(Enum):
     DUMMY = 4  # play dead
 
 
-def env(render_mode=None):
+def getSimRobotEnv(render_mode=None):
     env = SimRobotEnv(render_mode=render_mode)
     # This wrapper is only for environments which print results to the terminal
     # if render_mode == "ansi":

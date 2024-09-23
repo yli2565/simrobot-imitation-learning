@@ -1,7 +1,7 @@
 import SimRobotAEC
 from SimRobotAEC import SimRobotEnv
 
-env = SimRobotAEC.env(render_mode="human")
+env = SimRobotAEC.getSimRobotEnv(render_mode="human")
 env.reset(seed=55)
 # env.observe(env.agent_selection)
 # env.step(env.action_space(env.agent_selection).sample())
