@@ -1,3 +1,6 @@
+"""
+Common utility functions
+"""
 import psutil
 
 

@@ -1,27 +1,13 @@
+from typing import Any, Dict, List, Set
+
 from pettingzoo.utils import agent_selector, wrappers
+
 from InterThreadCommunication import SharedMemoryHelper, SharedMemoryManager
-from typing import Any, List, Dict, Set
 
 
 class RobotSelector(agent_selector):
-    """Outputs an agent in the given order whenever agent_select is called.
-
-    Can reinitialize to a new order.
-
-    Example:
-        >>> from pettingzoo.utils import agent_selector
-        >>> agent_selector = agent_selector(agent_order=["player1", "player2"])
-        >>> agent_selector.reset()
-        'player1'
-        >>> agent_selector.next()
-        'player2'
-        >>> agent_selector.is_last()
-        True
-        >>> agent_selector.reinit()
-        >>> agent_selector.next()
-        'player2'
-        >>> agent_selector.is_last()
-        False
+    """
+    Automatically select the next robot that is actively asking for new action
     """
 
     def __init__(

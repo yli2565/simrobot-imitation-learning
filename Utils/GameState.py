@@ -1,3 +1,6 @@
+"""
+Enums of describe the robot's PERCEPTION of the game state
+"""
 from enum import Enum, auto
 
 

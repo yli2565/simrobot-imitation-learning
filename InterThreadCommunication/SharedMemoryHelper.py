@@ -30,6 +30,7 @@ class SharedMemoryHelper:
         self.name: str = name
         self.shape: Tuple[int, ...] = shape
         self.verbose: int = verbose if verbose >= 0 else DEFAULT_VERBOSE_LEVEL
+        self.connected: bool = False
         # self.verbose: int = DEFAULT_VERBOSE_LEVEL
 
         self._shm: Optional[shared_memory.SharedMemory] = None
@@ -145,10 +146,12 @@ class SharedMemoryHelper:
     def createTunnel(self) -> None:
         self.createShm()
         self.createSem()
+        self.connected = True
 
     def connectTunnel(self) -> None:
         self.connectShm()
         self.connectSem()
+        self.connected = True
 
     @property
     def semName(self) -> str:
@@ -316,9 +319,15 @@ class SharedMemoryHelper:
             self._shm.close()
         if self._sem is not None:
             self._sem.close()
+        self.connected = False
 
     def unlink(self):
         if self._shm is not None and self.ownShm:
+            # Write all 0
+            self._shm.buf[:]=b"\x00"*len(self._shm.buf)
             self._shm.unlink()
         if self._sem is not None and self.ownSem:
+            while self._sem.value > 0:
+                self._sem.acquire()
             self._sem.unlink()
+        self.connected = False

@@ -1,10 +1,17 @@
+"""
+Generate the config and scene files we need to run a game
+"""
+
+# Default values
 TEAM1_NUMBER = "5"
 TEAM1_COLOR = "black"
 TEAM1_GOALIE_COLOR = "purple"
 TEAM2_NUMBER = "70"
 TEAM2_COLOR = "red"
 TEAM2_GOALIE_COLOR = "blue"
-LOG_DATA_ONLY_CON_SAMPLE="""dr annotation
+
+
+LOG_DATA_ONLY_CON_TEMPLATE="""dr annotation
 dr timing
 for Upper dr representation:JPEGImage off
 for Upper dr representation:CameraImage off
@@ -94,7 +101,7 @@ for Audio dr representation:Whistle
 for Referee dr representation:RefereePercept
 for Referee dr representation:Keypoints"""
 
-LOG_ALL_CON_SAMPLE = """dr annotation
+LOG_ALL_CON_TEMPLATE = """dr annotation
 dr timing
 for Upper dr representation:JPEGImage
 for Upper dr representation:CameraImage
@@ -186,7 +193,7 @@ for Audio dr representation:Whistle
 for Referee dr representation:RefereePercept
 for Referee dr representation:Keypoints"""
 
-SCENE_CON_SAMPLE = """
+SCENE_CON_TEMPLATE = """
 call Includes/Normal
 
 # all views are defined in another script
@@ -218,7 +225,7 @@ st on
 gc ready
 """
 
-ROS2_SAMPLE = """
+SCENE_ROS2_TEMPLATE = """
 <Simulation>
 
   <Include href="Includes/NaoV6H25.rsi2"/>
@@ -261,14 +268,14 @@ ROS2_SAMPLE = """
   </Scene>
 </Simulation>
 """
-ROBOT_SAMPLE = """
+ROBOT_TEMPLATE = """
     <Body ref="Nao" name="robot{robot_id}">
       <Translation x="{x}cm" y="{y}cm" z="320mm"/>
       <Rotation z="{rotation}degree"/>
       <Set name="NaoColor" value="{color}"/>
     </Body>
 """
-DUMMY_ROBOT_SAMPLE = """
+DUMMY_ROBOT_TEMPLATE = """
     <Body ref="NaoDummy" name="robot{robot_id}">
       <Translation x="{x}cm" y="{y}cm" z="320mm"/>
       <Rotation z="{rotation}degree"/>
@@ -280,7 +287,7 @@ DUMMY_ROBOT_SAMPLE = """
 def generateSceneCon(LogConFileName: str):
     if not LogConFileName.endswith(".con"):
         LogConFileName += ".con"
-    return SCENE_CON_SAMPLE.format(log_con_filename=LogConFileName)
+    return SCENE_CON_TEMPLATE.format(log_con_filename=LogConFileName)
 
 def generateRos2(
     robots,
@@ -296,19 +303,19 @@ def generateRos2(
     for idx,robot in enumerate(robots):
         idx+=1
         if robot == 1:
-            robotsXML += ROBOT_SAMPLE.format(
+            robotsXML += ROBOT_TEMPLATE.format(
                 robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team1GoalieColor
             )
         elif robot in range(2, 20):
-            robotsXML += ROBOT_SAMPLE.format(
+            robotsXML += ROBOT_TEMPLATE.format(
                 robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team1Color
             )
         elif robot == 21:
-            robotsXML += ROBOT_SAMPLE.format(
+            robotsXML += ROBOT_TEMPLATE.format(
                 robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team2GoalieColor
             )
         elif robot in range(20, 40):
-            robotsXML += ROBOT_SAMPLE.format(
+            robotsXML += ROBOT_TEMPLATE.format(
                 robot_id=robot, x=-idx*25, y=-idx*25, rotation=0, color=team2Color
             )
         else:
@@ -317,24 +324,24 @@ def generateRos2(
     for idx,robot in enumerate(dummyRobots):
         idx+=1
         if robot == 1:
-            dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
+            dummyRobotsXML += DUMMY_ROBOT_TEMPLATE.format(
                 robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team1GoalieColor
             )
         elif robot in range(2, 20):
-            dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
+            dummyRobotsXML += DUMMY_ROBOT_TEMPLATE.format(
                 robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team1Color
             )
         elif robot == 21:
-            dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
+            dummyRobotsXML += DUMMY_ROBOT_TEMPLATE.format(
                 robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team2GoalieColor
             )
         elif robot in range(20, 40):
-            dummyRobotsXML += DUMMY_ROBOT_SAMPLE.format(
+            dummyRobotsXML += DUMMY_ROBOT_TEMPLATE.format(
                 robot_id=robot, x=idx*25, y=idx*25, rotation=0, color=team2Color
             )
         else:
             raise Exception("Invalid dummy robot number")
-    simulationXML = ROS2_SAMPLE.format(
+    simulationXML = SCENE_ROS2_TEMPLATE.format(
         robots=robotsXML,
         dummy_robots=dummyRobotsXML,
         team1_number=team1Number,
@@ -347,7 +354,7 @@ def generateRos2(
     return simulationXML
 
 def generateLogCon():
-    return LOG_DATA_ONLY_CON_SAMPLE
+    return LOG_DATA_ONLY_CON_TEMPLATE
 
 if __name__ == "__main__":
     print(generateRos2([5], [21]))

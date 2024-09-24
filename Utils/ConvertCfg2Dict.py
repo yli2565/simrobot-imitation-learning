@@ -78,5 +78,6 @@ def cfg2dict(filePath):
 
 
 if __name__ == "__main__":
-    FieldDim=cfg2dict("/home/yuhao2024/Documents/BHumanCodeRelease-origin/Config/Locations/Default/fieldDimensions.cfg")
+    # Path to fieldDimensions.cfg
+    FieldDim=cfg2dict("<Path to BHuman/BadgerRLSystem repo root>/Config/Locations/Default/fieldDimensions.cfg")
     print(FieldDim)

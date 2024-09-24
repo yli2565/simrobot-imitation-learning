@@ -1,12 +1,13 @@
 from .ConvertCfg2Dict import cfg2dict
-from .GameState import CompetitionPhase, GameState, Phase, State, GameControllerState
+from .GameState import (CompetitionPhase, GameControllerState, GameState,
+                        Phase, State)
 from .GeneralUtils import is_zombie, kill_process
-from .GenerateScene import generateSceneCon, generateRos2, generateLogCon
+from .GenerateScene import generateLogCon, generateRos2, generateSceneCon
 from .Observation_Adam import Observation as ObservationAdam
 from .Observation_Josh import Observation as ObservationJosh
+from .RandomPoseGenerator import (SoccerFieldAreas, SoccerFieldPoints,
+                                  generatePoses)
 from .RobotSelector import RobotSelector
-from .RandomPoseGenerator import SoccerFieldPoints, SoccerFieldAreas
-from .RandomPoseGenerator import generatePoses
 
 __all__ = [
     # Utils

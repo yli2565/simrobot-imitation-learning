@@ -1,48 +1,40 @@
 import functools
 import math
 import os
-from pathlib import Path
 import subprocess
 import sys
-from typing import Any, Dict, List
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List
+
 import gymnasium
 import numpy as np
-from gymnasium.spaces import Discrete
 from gymnasium.spaces import Box
-import shapely
-from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager, RandomPolicy
-
 from pettingzoo import AECEnv
-from pettingzoo.utils import agent_selector, wrappers
+from pettingzoo.utils import wrappers
 from shapely import Point
+from TypedShmem import SDict, ShmemAccessor, ShmemHeap, SList
 
 from InterThreadCommunication import SharedMemoryHelper, SharedMemoryManager
-from TypedShmem import ShmemHeap, ShmemAccessor, SDict, SList
 from Utils import (
-    GameState,
-    State,
     GameControllerState,
-    ObservationJosh,
-    cfg2dict,
-    kill_process,
-    is_zombie,
-    generateRos2,
-    generateSceneCon,
-    generateLogCon,
+    GameState,
     RobotSelector,
-    generatePoses,
     SoccerFieldAreas,
     SoccerFieldPoints,
+    State,
+    generateLogCon,
+    generatePoses,
+    generateRos2,
+    generateSceneCon,
+    is_zombie,
+    kill_process,
 )
 
-# these paths must match the ones used by the c++ code
-# BADGER_RL_SYSTEM_DIR = Path("/root/autodl-tmp/BadgerRLSystem/")
-BADGER_RL_SYSTEM_DIR = Path("/home/yuhao2024/Documents/SimRobotAEC/BadgerRLSystem/")
-# BADGER_RL_SYSTEM_DIR = Path("/home/chkxwlyh/Documents/Study/RL100/BadgerRLSystem/")
+BADGER_RL_SYSTEM_DIR = Path(__file__).parent / "BadgerRLSystem"
 
 DEBUG_PRINTS = False
-DEBUG = True
+DEBUG = False
 
 RAW_OBS_SIZE = 100
 OBS_SIZE = 5
@@ -52,98 +44,28 @@ INFO_SIZE = 55
 GROUND_TRUTH_SIZE = 5
 EPISODE_TIME_LIMIT = 60 * 1000  # (ms)
 SHM_VERBOSE = 2
-CALC_OBS_IN_PYTHON = False
-CALC_ACT_IN_PYTHON = False
-CALC_REWARD_IN_PYTHON = True
 
 
 class RobotTactic(Enum):
-    NONE = 0
-    BHUMAN_CONTROL = 1
-    POLICY_CONTROL = 2
-    STATIC_CONTROL = 3
+    """The tactic of a robot"""
+
+    NONE = 0  # Not used
+    BHUMAN_CONTROL = 1  # play with Bhuman policy
+    POLICY_CONTROL = 2  # play with RL policy (communicate with python)
+    STATIC_CONTROL = 3  # play static logic
     DUMMY = 4  # play dead
 
 
 def getSimRobotEnv(render_mode=None):
+    """Create a SimRobot env with layers of wrappers for exception handling."""
     env = SimRobotEnv(render_mode=render_mode)
-    # This wrapper is only for environments which print results to the terminal
-    # if render_mode == "ansi":
-    #     env = wrappers.CaptureStdoutWrapper(env)
-    # this wrapper helps error handling for discrete action spaces
     env = wrappers.AssertOutOfBoundsWrapper(env)
-    # Provides a wide variety of helpful user errors
-    # Strongly recommended
     env = wrappers.OrderEnforcingWrapper(env)
     return env
 
 
 class SimRobotEnv(AECEnv):
     metadata = {"render_modes": ["human"], "name": "SimRobotTraining_v0"}
-
-    def initialize_agents(self):
-        # agents
-        # Team 1's robot is in [0, 19], Team 2's robot is in [20, 39]
-        # The agent number of a robot is its robot number - 1. For example, robot 1 is agent 0
-
-        # Each robot is controlled by a RL agent
-        self.agentRobots = [5, 24]  # Use PolicyControl
-        # Each dummy robot is just an obstacle. Their position can be set during reset
-        self.dummyRobots = [1, 21]  # Play Dead
-        self.BhumanRobots = [
-            3,
-            23,
-        ]  # Robots following Bhuman code # Use BHuman's control logic
-        self.hijackedRobots = [
-            7,
-            27,
-        ]  # Robots following hard coded logic # Use Static Control logic in StaticControl.cpp
-
-        # Verification part
-        set1, set2, set3, set4 = (
-            set(self.agentRobots),
-            set(self.dummyRobots),
-            set(self.BhumanRobots),
-            set(self.hijackedRobots),
-        )
-        if (
-            (set1 & set2)
-            or (set1 & set3)
-            or (set1 & set4)
-            or (set2 & set3)
-            or (set2 & set4)
-            or (set3 & set4)
-        ):
-            raise ValueError("Robot cannot be in multiple teams at the same time.")
-
-        # PettingZoo required fields
-        self.possible_agents = self.agentRobots
-
-    # Helper fields
-    @property
-    def team1(self):
-        return list(filter(lambda x: 0 < x < 20, self.allRobots))
-
-    @property
-    def team2(self):
-        return list(filter(lambda x: 20 < x < 40, self.allRobots))
-
-    @property
-    def teams(self):
-        return {0: self.team1, 1: self.team2}
-
-    @property
-    def moveableRobots(self):
-        return [*self.agentRobots, *self.BhumanRobots, *self.hijackedRobots]
-
-    @property
-    def allRobots(self):
-        return [
-            *self.agentRobots,
-            *self.dummyRobots,
-            *self.BhumanRobots,
-            *self.hijackedRobots,
-        ]
 
     def __init__(self, render_mode=None):
         """
@@ -159,7 +81,7 @@ class SimRobotEnv(AECEnv):
         These attributes should not be changed after initialization.
         """
 
-        self.initialize_agents()
+        self.initializeAgents()
 
         # Scene
         self.sceneName = "PythonEnvGenerated"
@@ -204,7 +126,6 @@ class SimRobotEnv(AECEnv):
                 "RobotStateFlagArrayShmSize": len(self.agentRobots),
                 "ActionArrayShmSize": int(np.prod(self.action_space(robot).shape)),
                 "ObsArrayShmSize": int(np.prod(self.observation_space(robot).shape)),
-                "GroundTruthArrayShmSize": GROUND_TRUTH_SIZE,
                 "InitialPoseArrayShmSize": 6 * len(self.agentRobots),
                 "UpdatePeriod": 500,
                 "Team1Number": self.team1Number,
@@ -227,171 +148,7 @@ class SimRobotEnv(AECEnv):
         self.interruptCallback = interruptCallback
         self.rng = np.random.default_rng(55)
 
-    @functools.lru_cache(maxsize=None)
-    def observation_space(self, agent):
-        return self._observation_spaces[agent]
-
-    @functools.lru_cache(maxsize=None)
-    def action_space(self, agent):
-        return self._action_spaces[agent]
-
-    def render(self):
-        """
-        Renders the environment. In human mode, it can print to terminal, open
-        up a graphical window, or open up some other display that a human can see and understand.
-        """
-        gymnasium.logger.warn(
-            "You are calling render method without specifying any render mode."
-        )
-
-    def close(self):
-        """
-        Close should release any graphical displays, subprocesses, network connections
-        or any other environment data which should not be kept around after the
-        user is no longer using the environment.
-        """
-        pass
-
-    def writeScenes(self):
-        logConName = self.sceneName + "_LogConfiguration"
-        # Generate .ros2 file and .con file
-        self.scene = {
-            "ros2": generateRos2(
-                robots=self.moveableRobots,
-                dummyRobots=self.dummyRobots,
-                team1Number=self.team1Number,
-                team2Number=self.team2Number,
-            ),
-            "scene_con": generateSceneCon(logConName),
-            "log_con": generateLogCon(),
-        }
-        # Write the ros2 and con file
-        with open(
-            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
-        ) as ros2File:
-            ros2File.write(self.scene["ros2"])
-        with open(
-            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
-        ) as conFile:
-            conFile.write(self.scene["scene_con"])
-        with open(
-            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/Includes/{logConName}.con", "w"
-        ) as conFile:
-            conFile.write(self.scene["log_con"])
-
-    def startSimRobot(self):
-        if sys.platform.startswith("win"):
-            raise NotImplementedError("Launching SimRobot on Windows not supported")
-        elif sys.platform.startswith("darwin"):
-            # MACOS specific command
-            command = [
-                "open",
-                "-g",
-                BADGER_RL_SYSTEM_DIR / "Config/Scenes/randomScene.ros2",
-            ]
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=BADGER_RL_SYSTEM_DIR,
-            )
-        elif sys.platform.startswith("linux"):
-            # Compile the SimRobot binary
-            compileCommand = [
-                BADGER_RL_SYSTEM_DIR / "Make/Linux/compile",
-                "Release",
-                "SimRobot",
-            ]
-            compileProcess = subprocess.Popen(
-                compileCommand,
-                stdout=subprocess.DEVNULL,
-                cwd=BADGER_RL_SYSTEM_DIR,
-            )
-            compileProcess.wait()
-
-            # Launch the SimRobot Simulator
-            runCommand = [
-                str(BADGER_RL_SYSTEM_DIR / "Build/Linux/SimRobot/Release/SimRobot"),
-                "-g",
-                str(BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2"),
-            ]
-
-            env = os.environ.copy()
-
-            env = {**env, **self.environmentVariables[self.possible_agents]}
-
-            # TODO: change the output and error file name
-            with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
-                process = subprocess.Popen(
-                    runCommand,
-                    stdout=outFile,
-                    stderr=errFile,
-                    cwd=BADGER_RL_SYSTEM_DIR,
-                    env=env,
-                )
-
-        else:
-            raise NotImplementedError("Unsupported platform")
-
-        self.simulator_pid = process.pid
-        return
-
-    def resetBallAndRobotPositions(self, seed=None):
-        """
-        Sample usage of generatePoses()
-        Here we initialize all robots in their penalty area, but only the goalie should be in goal area
-        """
-        purposedInitialPose: Dict[str, Point] = {}
-
-        if seed is not None:
-            rng = np.random.default_rng(seed)
-        else:
-            rng = self.rng
-
-        initialBallPose: Point = generatePoses(
-            SoccerFieldAreas.centerCircle, 1, rng=rng
-        )[0]
-
-        area = SoccerFieldAreas.ownPenaltyArea.difference(SoccerFieldAreas.ownGoalArea)
-        candidatePos: List[Point] = generatePoses(area, len(self.team1), rng=rng)
-
-        for robot in self.team1:
-            if robot == 1:
-                purposedInitialPose[str(robot)] = generatePoses(
-                    SoccerFieldAreas.ownGoalArea, 1, rng=rng
-                )[0]
-            else:
-                purposedInitialPose[str(robot)] = candidatePos.pop()
-
-        area = SoccerFieldAreas.opponentPenaltyArea.difference(
-            SoccerFieldAreas.opponentGoalArea
-        )
-        candidatePos = generatePoses(area, len(self.team2), rng=rng)
-
-        for robot in self.team2:
-            if robot == 21:
-                purposedInitialPose[str(robot)] = generatePoses(
-                    SoccerFieldAreas.opponentGoalArea, 1, rng=rng
-                )[0]
-            else:
-                purposedInitialPose[str(robot)] = candidatePos.pop()
-
-        # assign rotation
-        for robot, robotPos in purposedInitialPose.items():
-            rot = math.atan2(
-                initialBallPose.y - robotPos.y, initialBallPose.x - robotPos.x
-            )
-            purposedInitialPose[robot] = [
-                robotPos.x,
-                robotPos.y,
-                350.0,
-                0.0,
-                0.0,
-                rot,
-            ]
-        purposedInitialPose["Ball"] = [initialBallPose.x, initialBallPose.y, 50.0]
-
-        return purposedInitialPose
+    # Gym API Required
 
     def reset(self, seed=None, options=None):
         """
@@ -412,14 +169,18 @@ class SimRobotEnv(AECEnv):
             self.writeScenes()
             if DEBUG:
                 self.simulator_pid = -1  # launch the simulator manually
-            elif self.simulator_pid == -1:
+            else:
                 self.startSimRobot()
-
-        if self.simulator_pid != -1 and is_zombie(self.simulator_pid):
-            # Restart the simulator
-            kill_process(self.simulator_pid)
-            self.startSimRobot()
-
+        elif self.simulator_pid > 0 :
+            if is_zombie(self.simulator_pid):
+                kill_process(self.simulator_pid)
+                self.simulator_pid = 0
+                self.startSimRobot()
+            
+        # Handle duplicated reset
+        if hasattr(self, 'num_moves') and self.num_moves ==0 : 
+            return
+        
         # Reset data
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -461,12 +222,6 @@ class SimRobotEnv(AECEnv):
         # This will wait until a robot return the first observation
         self.agent_selection = self._agent_selector.next()
         print(f"Reset Agent selection: {self.agent_selection}")
-
-    def calcReward(self, groundTruth):
-        """
-        Calculate the reward for the agent from the ground truth information
-        """
-        return 1
 
     def observe(self, agent):
         """
@@ -579,7 +334,311 @@ class SimRobotEnv(AECEnv):
             self.agent_selection = self._agent_selector.next()
             print(f"Agent selection: {self.agent_selection}")
 
+    def _was_dead_step(self, action) -> None:
+        """Minor change: Instead of using self._skip_agent_selection to determine the next agent, directly call self._agent_selector.next() to get the next agent."""
+
+        if action is not None:
+            raise ValueError("when an agent is dead, the only valid action is None")
+
+        # removes dead agent
+        agent = self.agent_selection
+        assert (
+            self.terminations[agent] or self.truncations[agent]
+        ), "an agent that was not dead as attempted to be removed"
+        del self.terminations[agent]
+        del self.truncations[agent]
+        del self.rewards[agent]
+        del self._cumulative_rewards[agent]
+        del self.infos[agent]
+        self.agents.remove(agent)
+
+        # finds next dead agent or loads next live agent (Stored in _skip_agent_selection)
+        _deads_order = [
+            agent
+            for agent in self.agents
+            if (self.terminations[agent] or self.truncations[agent])
+        ]
+        if _deads_order:
+            if getattr(self, "_skip_agent_selection", None) is None:
+                self._skip_agent_selection = self.agent_selection
+            self.agent_selection = _deads_order[0]
+        else:
+            self.agent_selection = self._agent_selector.next()
+        self._clear_rewards()
+
+    @functools.lru_cache(maxsize=None)
+    def observation_space(self, agent):
+        return self._observation_spaces[agent]
+
+    @functools.lru_cache(maxsize=None)
+    def action_space(self, agent):
+        return self._action_spaces[agent]
+
+    def render(self):
+        """
+        Renders the environment. In human mode, it can print to terminal, open
+        up a graphical window, or open up some other display that a human can see and understand.
+        """
+        gymnasium.logger.warn(
+            "You are calling render method without specifying any render mode."
+        )
+
+    def close(self):
+        """
+        Close should release any graphical displays, subprocesses, network connections
+        or any other environment data which should not be kept around after the
+        user is no longer using the environment.
+        """
+        if self.simulator_pid > 0:
+            kill_process(self.simulator_pid)
+            self.simulator_pid = 0
+
+        self.closeShm()
+
+    # Helper fields
+    @property
+    def team1(self):
+        return list(filter(lambda x: 0 < x < 20, self.allRobots))
+
+    @property
+    def team2(self):
+        return list(filter(lambda x: 20 < x < 40, self.allRobots))
+
+    @property
+    def teams(self):
+        return {0: self.team1, 1: self.team2}
+
+    @property
+    def moveableRobots(self):
+        return [*self.agentRobots, *self.BhumanRobots, *self.hijackedRobots]
+
+    @property
+    def allRobots(self):
+        return [
+            *self.agentRobots,
+            *self.dummyRobots,
+            *self.BhumanRobots,
+            *self.hijackedRobots,
+        ]
+
+    # Core functions
+    def initializeAgents(self):
+        """
+        Set up agents before launching the simulator
+        """
+
+        # agents
+        # Team 1's robot is in [0, 19], Team 2's robot is in [20, 39]
+        # The agent number of a robot is its robot number - 1. For example, robot 1 is agent 0
+
+        # Each robot is controlled by a RL agent
+        self.agentRobots = [5, 24]  # Use PolicyControl
+
+        # Each dummy robot is just an obstacle. Their position can be set during reset
+        self.dummyRobots = [1, 21]  # Play Dead
+        self.BhumanRobots = [
+            3,
+            23,
+        ]  # Robots following Bhuman code # Use BHuman's control logic
+        self.hijackedRobots = [
+            7,
+            27,
+        ]  # Robots following hard coded logic # Use Static Control logic in StaticControl.cpp
+
+        # Verification part
+        set1, set2, set3, set4 = (
+            set(self.agentRobots),
+            set(self.dummyRobots),
+            set(self.BhumanRobots),
+            set(self.hijackedRobots),
+        )
+        if (
+            (set1 & set2)
+            or (set1 & set3)
+            or (set1 & set4)
+            or (set2 & set3)
+            or (set2 & set4)
+            or (set3 & set4)
+        ):
+            raise ValueError("Robot cannot be in multiple teams at the same time.")
+
+        # PettingZoo required fields
+        self.possible_agents = self.agentRobots
+
+    def writeScenes(self):
+        """
+        Write .ros2 and .con files with specification of the each robot's role
+        """
+
+        logConName = self.sceneName + "_LogConfiguration"
+        # Generate .ros2 file and .con file
+        self.scene = {
+            "ros2": generateRos2(
+                robots=self.moveableRobots,
+                dummyRobots=self.dummyRobots,
+                team1Number=self.team1Number,
+                team2Number=self.team2Number,
+            ),
+            "scene_con": generateSceneCon(logConName),
+            "log_con": generateLogCon(),
+        }
+        # Write the ros2 and con file
+        with open(
+            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
+        ) as ros2File:
+            ros2File.write(self.scene["ros2"])
+        with open(
+            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
+        ) as conFile:
+            conFile.write(self.scene["scene_con"])
+        with open(
+            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/Includes/{logConName}.con", "w"
+        ) as conFile:
+            conFile.write(self.scene["log_con"])
+
+    def startSimRobot(self):
+        """
+        Launch the simulator based on the platform
+        """
+
+        if sys.platform.startswith("win"):
+            raise NotImplementedError("Launching SimRobot on Windows not supported")
+        elif sys.platform.startswith("darwin"):
+            # MACOS specific command
+            command = [
+                "open",
+                "-g",
+                BADGER_RL_SYSTEM_DIR / "Config/Scenes/randomScene.ros2",
+            ]
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=BADGER_RL_SYSTEM_DIR,
+            )
+        elif sys.platform.startswith("linux"):
+            # Compile the SimRobot binary
+            compileCommand = [BADGER_RL_SYSTEM_DIR / "Make/Linux/generate"]
+
+            compileProcess = subprocess.Popen(
+                compileCommand,
+                stdout=subprocess.DEVNULL,
+                cwd=BADGER_RL_SYSTEM_DIR,
+            )
+            compileProcess.wait()
+
+            compileCommand = [
+                BADGER_RL_SYSTEM_DIR / "Make/Linux/compile",
+                "Release",
+                "SimRobot",
+            ]
+            compileProcess = subprocess.Popen(
+                compileCommand,
+                stdout=subprocess.DEVNULL,
+                cwd=BADGER_RL_SYSTEM_DIR,
+            )
+            compileProcess.wait()
+
+            # Launch the SimRobot Simulator
+            runCommand = [
+                str(BADGER_RL_SYSTEM_DIR / "Build/Linux/SimRobot/Release/SimRobot"),
+                "-g",
+                str(BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2"),
+            ]
+
+            env = os.environ.copy()
+
+            env["PythonEnvPrefix"] = str(os.getpid()) + "_" if not DEBUG else "DEBUG_"
+
+            # TODO: change the output and error file name
+            with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
+                process = subprocess.Popen(
+                    runCommand,
+                    stdout=outFile,
+                    stderr=errFile,
+                    cwd=BADGER_RL_SYSTEM_DIR,
+                    env=env,
+                )
+
+        else:
+            raise NotImplementedError("Unsupported platform")
+
+        self.simulator_pid = process.pid
+        return
+
+    def resetBallAndRobotPositions(self, seed=None):
+        """
+        The utility function to generate the ball and robot positions in reset() function call
+
+        Sample usage of generatePoses()
+        Here we initialize all robots in their penalty area, but only the goalie should be in goal area
+        """
+
+        purposedInitialPose: Dict[str, Point] = {}
+
+        if seed is not None:
+            rng = np.random.default_rng(seed)
+        else:
+            rng = self.rng
+
+        initialBallPose: Point = generatePoses(
+            SoccerFieldAreas.centerCircle, 1, rng=rng
+        )[0]
+
+        area = SoccerFieldAreas.ownPenaltyArea.difference(SoccerFieldAreas.ownGoalArea)
+        candidatePos: List[Point] = generatePoses(area, len(self.team1), rng=rng)
+
+        for robot in self.team1:
+            if robot == 1:
+                purposedInitialPose[str(robot)] = generatePoses(
+                    SoccerFieldAreas.ownGoalArea, 1, rng=rng
+                )[0]
+            else:
+                purposedInitialPose[str(robot)] = candidatePos.pop()
+
+        area = SoccerFieldAreas.opponentPenaltyArea.difference(
+            SoccerFieldAreas.opponentGoalArea
+        )
+        candidatePos = generatePoses(area, len(self.team2), rng=rng)
+
+        for robot in self.team2:
+            if robot == 21:
+                purposedInitialPose[str(robot)] = generatePoses(
+                    SoccerFieldAreas.opponentGoalArea, 1, rng=rng
+                )[0]
+            else:
+                purposedInitialPose[str(robot)] = candidatePos.pop()
+
+        # assign rotation
+        for robot, robotPos in purposedInitialPose.items():
+            rot = math.atan2(
+                initialBallPose.y - robotPos.y, initialBallPose.x - robotPos.x
+            )
+            purposedInitialPose[robot] = [
+                robotPos.x,
+                robotPos.y,
+                350.0,
+                0.0,
+                0.0,
+                rot,
+            ]
+        purposedInitialPose["Ball"] = [initialBallPose.x, initialBallPose.y, 50.0]
+
+        return purposedInitialPose
+
+    def calcReward(self, extendedInfo: Dict[str, Any]) -> float:
+        """
+        Calculate the reward for the agent from extended info, which include some groundTruth information of the game status
+        """
+        return 1
+
     def configShm(self):
+        """
+        Configure the shared memory for communication to the simulator
+
+        But we don't connect it here
+        """
+
         if DEBUG:
             pythonEnvPrefix = "DEBUG_"
         else:
@@ -620,7 +679,6 @@ class SimRobotEnv(AECEnv):
                     ("ActionRequestFlagShm", (1,), SHM_VERBOSE),
                     ("ObsArrayShm", (OBS_SIZE,), SHM_VERBOSE),
                     ("ActionArrayShm", (ACT_SIZE,), SHM_VERBOSE),
-                    ("GroundTruthArrayShm", (GROUND_TRUTH_SIZE,), SHM_VERBOSE),
                 ],
             )
             for robot in self.agentRobots
@@ -638,6 +696,8 @@ class SimRobotEnv(AECEnv):
         }
 
     def openShm(self):
+        """Unlink(delete) the shared memory blocks"""
+
         self.globalConfigShm.create()
         self.initialPosesShm.create()
 
@@ -653,40 +713,13 @@ class SimRobotEnv(AECEnv):
             self.robotExtendedInfoShmems[robot].postCounterSem()
 
     def closeShm(self):
-        self.globalShmManager.close()
+        """Close the shared memory blocks"""
+
+        self.globalConfigShm.unlink()
+        self.initialPosesShm.unlink()
+
         self.globalShmManager.unlink()
-        for robot in self.robots:
-            self.robotShmManagers[robot].close()
+
+        for robot in self.agentRobots:
             self.robotShmManagers[robot].unlink()
-
-    def _was_dead_step(self, action) -> None:
-        if action is not None:
-            raise ValueError("when an agent is dead, the only valid action is None")
-
-        # removes dead agent
-        agent = self.agent_selection
-        assert (
-            self.terminations[agent] or self.truncations[agent]
-        ), "an agent that was not dead as attempted to be removed"
-        del self.terminations[agent]
-        del self.truncations[agent]
-        del self.rewards[agent]
-        del self._cumulative_rewards[agent]
-        del self.infos[agent]
-        self.agents.remove(agent)
-
-        # finds next dead agent or loads next live agent (Stored in _skip_agent_selection)
-        _deads_order = [
-            agent
-            for agent in self.agents
-            if (self.terminations[agent] or self.truncations[agent])
-        ]
-        if _deads_order:
-            if getattr(self, "_skip_agent_selection", None) is None:
-                self._skip_agent_selection = self.agent_selection
-            self.agent_selection = _deads_order[0]
-        else:
-            self.agent_selection = self._agent_selector.next()
-        self._clear_rewards()
-
-    # def clearShm(self):
+            self.robotExtendedInfoShmems[robot].unlink()

@@ -1,16 +1,21 @@
-import json
-import numpy as np
-from shapely import MultiPolygon, unary_union
-from shapely.geometry import Polygon, Point, box
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Polygon as PlotPolygon
+from pathlib import Path
+
 import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from matplotlib.patches import Circle
+from matplotlib.patches import Polygon as PlotPolygon
+from shapely import MultiPolygon, unary_union
+from shapely.geometry import Point, Polygon, box
+
 from .ConvertCfg2Dict import cfg2dict
 
 # Parse the provided data
 fieldData = cfg2dict(
-    "/home/yuhao2024/Documents/BHumanCodeRelease-origin/Config/Locations/Default/fieldDimensions.cfg"
+    Path(__file__).parent.parent
+    / "BadgerRLSystem"
+    / "Config/Locations/Default/fieldDimensions.cfg"
 )
 # Create Shapely objects for the field and important areas
 
