@@ -1,0 +1,55 @@
+# python3 virtualenvs
+# if you add one with a different name, feel free to add it here.
+env
+test_env
+env2
+yoons
+wandb
+policies
+
+# generated artifacts types that shouldn't be committed 
+__pycache__
+temp
+/*.zip
+/*.json
+/*.h5
+*.0
+*.pth
+*.npz
+*.csv
+*.bak
+*.tar
+
+# misc
+testenv
+
+.vscode/launch.json
+yoon_test.py
+abssim
+.python-version
+
+# large files
+ICRA-2022/experiments
+multi_agent/*.zip
+multi_agent/utils/exported_model/*
+
+# Tensorboard logging
+multi_agent/runs
+multi_agent/wandb
+multi_agent/curriculum/runs
+multi_agent/curriculum/policies/*.zip
+
+# Policy training
+self_play/policies/*.zip
+self_play/runs
+self_play/wandb
+
+*/wandb
+*/policies/*.zip
+#!global_self_play/policies/*.zip
+*/runs
+
+.DS_store
+venv
+output.txt
+error.txt
