@@ -23,7 +23,6 @@ temp
 # misc
 testenv
 
-.vscode/launch.json
 yoon_test.py
 abssim
 .python-version

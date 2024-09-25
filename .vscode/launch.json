@@ -1,0 +1,37 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "SimRobot: Demo",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/demo_env.py",
+            "subProcess": true,
+            "justMyCode": false
+        },
+        {
+            "name": "SimRobot: Tianshou Train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "subProcess": true,
+            "justMyCode": false
+        },
+        {
+            "name": "SimRobot: RLlib Train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_sample_rllib.py",
+            "args": [
+                "--enable-new-api-stack",
+                "--num-agents=5",
+                "--num-cpus=20"
+            ],
+            "subProcess": true,
+            "justMyCode": false
+        },
+    ]
+}
