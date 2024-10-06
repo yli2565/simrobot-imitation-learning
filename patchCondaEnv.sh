@@ -13,7 +13,7 @@ if [ -z "$CONDA_PREFIX" ]; then
 fi
 
 # Check if we're on Ubuntu 22.04
-if ! grep -q "22.04.4 LTS (Jammy Jellyfish)" /etc/os-release; then
+if ! grep -q "22.04.* LTS (Jammy Jellyfish)" /etc/os-release; then
     echo "Error: This script is specific to Ubuntu 22.04."
     exit 1
 fi

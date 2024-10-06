@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple, Union, cast
 
-import gymnasium as gym 
+import gymnasium as gym
 from gymnasium.spaces import Box
 import numpy as np
 from overrides import overrides
@@ -83,9 +83,9 @@ class parallel_env(ParallelEnv):
         # The agent number of a robot is its robot number - 1. For example, robot 1 is agent 0
 
         # Each robot is controlled by a RL agent
-        self.robots = [4,5,24]
+        self.robots = [4, 5, 24]
         # Each dummy robot is just an obstacle. Their position can be set during reset
-        self.dummyRobots = [1,21]
+        self.dummyRobots = [1, 21]
         self.BhumanRobots = []  # TODO: Implement robots following Bhuman code
         self.HijectedRobots = []  # TODO: Implement robots following hard coded logic
 
@@ -307,7 +307,7 @@ class parallel_env(ParallelEnv):
                         initialInfo[agent] = processedInfo
                         obsFetched[agentIdx] = True
                     else:
-                        if self.sim_pid!=-1 and is_zombie(self.sim_pid):
+                        if self.sim_pid != -1 and is_zombie(self.sim_pid):
                             kill_process(self.sim_pid)
                             raise Exception("Simulator shutdown unexpectedly")
 
@@ -367,7 +367,7 @@ class parallel_env(ParallelEnv):
                     "raw_act_shm"
                 ].sem.release()  # Please keep this line for synchronization
                 self.robotShmManagers[robot]["action_shm"].sendArray(actions[agent])
-        
+
         # Count the time between two actions
         if not hasattr(self, "now"):
             self.now = time.time()
@@ -399,7 +399,7 @@ class parallel_env(ParallelEnv):
                     info[agent] = processedInfo
                     obsFetched[agentIdx] = True
                 else:
-                    if self.sim_pid!=-1 and  is_zombie(self.sim_pid):
+                    if self.sim_pid != -1 and is_zombie(self.sim_pid):
                         kill_process(self.sim_pid)
                         raise Exception("Simulator shutdown unexpectedly")
 
@@ -474,12 +474,12 @@ class parallel_env(ParallelEnv):
         with open(
             BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
         ) as ros2File:
+            for robot in self.robots:
             ros2File.write(generateRos2(self.robots, self.dummyRobots))
         with open(
             BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
         ) as conFile:
             conFile.write(generateSceneCon())
-
 
         if DEBUG:
             self.sim_pid = -1

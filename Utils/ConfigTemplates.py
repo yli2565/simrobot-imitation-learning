@@ -210,8 +210,6 @@ dt off
 st on
 
 gc ready
-
-log start
 """
 
 SCENE_ROS2_TEMPLATE = """

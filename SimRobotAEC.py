@@ -171,16 +171,16 @@ class SimRobotEnv(AECEnv):
                 self.simulator_pid = -1  # launch the simulator manually
             else:
                 self.startSimRobot()
-        elif self.simulator_pid > 0 :
+        elif self.simulator_pid > 0:
             if is_zombie(self.simulator_pid):
                 kill_process(self.simulator_pid)
                 self.simulator_pid = 0
                 self.startSimRobot()
-            
+
         # Handle duplicated reset
-        if hasattr(self, 'num_moves') and self.num_moves ==0 : 
+        if hasattr(self, "num_moves") and self.num_moves == 0:
             return
-        
+
         # Reset data
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -213,8 +213,10 @@ class SimRobotEnv(AECEnv):
         self._agent_selector = RobotSelector(
             self.agents,
             {
-                agent: self.robotShmManagers[agent]["ActionRequestFlagShm"]
-                for agent in self.agentRobots
+                self.possible_agents[idx]: self.robotShmManagers[agent][
+                    "ActionRequestFlagShm"
+                ]
+                for idx, agent in enumerate(self.agentRobots)
             },
             self.interruptCallback,
         )
@@ -230,7 +232,8 @@ class SimRobotEnv(AECEnv):
         at any time after reset() is called.
         """
         # Fetch the corresponding observation array from shared memory
-        obsShm = self.robotShmManagers[agent]["ObsArrayShm"]
+        agentNum = int(agent)
+        obsShm = self.robotShmManagers[agentNum]["ObsArrayShm"]
 
         # Wait for observation when: fetching very first observation, else use old observation
         if obsShm.probeSem() != 0 or self.observations[agent] is None:
@@ -238,9 +241,9 @@ class SimRobotEnv(AECEnv):
             self.observations[agent] = observation
 
         # Fetch extended info
-        while self.robotExtendedInfoShmems[agent].getCounterSemValue() == 0:
+        while self.robotExtendedInfoShmems[agentNum].getCounterSemValue() == 0:
             pass
-        self.extendedInfos[agent] = self.robotExtendedInfos[agent].fetch()
+        self.extendedInfos[agent] = self.robotExtendedInfos[agentNum].fetch()
         print(self.extendedInfos[agent])
         return self.observations[agent]
 
@@ -271,6 +274,7 @@ class SimRobotEnv(AECEnv):
             return
 
         agent = self.agent_selection
+        agentNum = int(agent)
 
         # Calculate reward
         extendedInfo = self.extendedInfos[agent]
@@ -304,8 +308,8 @@ class SimRobotEnv(AECEnv):
         #     self.truncations[self.agent_selection] = True
 
         # Perform new action
-        agentActionShm = self.robotShmManagers[agent]["ActionArrayShm"]
-        agentActionRequestFlagShm = self.robotShmManagers[agent]["ActionRequestFlagShm"]
+        agentActionShm = self.robotShmManagers[agentNum]["ActionArrayShm"]
+        agentActionRequestFlagShm = self.robotShmManagers[agentNum]["ActionRequestFlagShm"]
         agentActionShm.sendArray(action)
         agentActionRequestFlagShm.clearSem()  # Respond to the request
 
@@ -463,7 +467,7 @@ class SimRobotEnv(AECEnv):
             raise ValueError("Robot cannot be in multiple teams at the same time.")
 
         # PettingZoo required fields
-        self.possible_agents = self.agentRobots
+        self.possible_agents = [str(robot) for robot in self.agentRobots]
 
     def writeScenes(self):
         """
