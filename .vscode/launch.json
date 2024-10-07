@@ -21,6 +21,14 @@
             "justMyCode": false
         },
         {
+            "name": "SimRobot: Tianshou Sample",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_sample_tianshou_minimum.py",
+            "subProcess": true,
+            "justMyCode": false
+        },
+        {
             "name": "SimRobot: RLlib Train",
             "type": "debugpy",
             "request": "launch",

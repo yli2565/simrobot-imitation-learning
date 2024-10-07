@@ -9,6 +9,9 @@ from .RandomPoseGenerator import (SoccerFieldAreas, SoccerFieldPoints,
                                   generatePoses)
 from .RobotSelector import RobotSelector
 
+from .RandomPolicy import RandomPolicy
+from .MultiAgentPolicyManager import MultiAgentPolicyManager
+
 __all__ = [
     # Utils
     "cfg2dict",
@@ -29,6 +32,8 @@ __all__ = [
     "State",
     # For AEC env
     "RobotSelector",
+    "RandomPolicy",
+    "MultiAgentPolicyManager",
     # Initialize Pose
     "SoccerFieldPoints",
     "SoccerFieldAreas",

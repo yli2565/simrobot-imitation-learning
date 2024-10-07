@@ -1,6 +1,8 @@
 from tianshou.data import Collector
 from tianshou.env import DummyVectorEnv, PettingZooEnv
-from tianshou.policy import MultiAgentPolicyManager, RandomPolicy
+
+# from tianshou.policy import MultiAgentPolicyManager
+from Utils import RandomPolicy, MultiAgentPolicyManager
 
 # Not finished yet !!!!!
 from SimRobotAEC import getSimRobotEnv
