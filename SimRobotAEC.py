@@ -165,12 +165,14 @@ class SimRobotEnv(AECEnv):
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
         # Reset simulator (If the simulator is not running, launch it)
+        print("Current Simulator PID:", self.simulator_pid)
         if self.simulator_pid == 0:
             self.writeScenes()
             if DEBUG:
                 self.simulator_pid = -1  # launch the simulator manually
             else:
                 self.startSimRobot()
+                print("Simulator launched.")
         elif self.simulator_pid > 0:
             if is_zombie(self.simulator_pid):
                 kill_process(self.simulator_pid)

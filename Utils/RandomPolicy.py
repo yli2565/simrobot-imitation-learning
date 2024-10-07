@@ -44,7 +44,21 @@ class RandomPolicy(BasePolicy[TRandomTrainingStats]):
             Please refer to :meth:`~tianshou.policy.BasePolicy.forward` for
             more detailed explanation.
         """
-        act = action_space.sample()
+        # Get the number of observations in the batch
+        batch_size = batch.obs.shape[0]
+        
+        # Initialize an empty list to store actions
+        actions = []
+        
+        # Generate an action for each observation
+        for _ in range(batch_size):
+            action = action_space.sample()
+            actions.append(action)
+        
+        # Convert the list of actions to a 2D numpy array
+        act = np.array(actions)
+        
+        # Create and return the result batch
         result = Batch(act=act)
         return cast(ActBatchProtocol, result)
 
