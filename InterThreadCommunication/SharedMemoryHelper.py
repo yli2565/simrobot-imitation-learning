@@ -324,10 +324,16 @@ class SharedMemoryHelper:
     def unlink(self):
         if self._shm is not None and self.ownShm:
             # Write all 0
-            self._shm.buf[:]=b"\x00"*len(self._shm.buf)
-            self._shm.unlink()
+            self._shm.buf[:] = b"\x00" * len(self._shm.buf)
+            try:
+                self._shm.unlink()
+            except FileNotFoundError:  # Already unlinked
+                pass
         if self._sem is not None and self.ownSem:
             while self._sem.value > 0:
                 self._sem.acquire()
-            self._sem.unlink()
+            try:
+                self._sem.unlink()
+            except posix_ipc.ExistentialError:  # Already unlinked
+                pass
         self.connected = False

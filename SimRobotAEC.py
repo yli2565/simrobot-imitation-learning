@@ -1,6 +1,7 @@
 import functools
 import math
 import os
+import random
 import subprocess
 import sys
 from enum import Enum
@@ -56,9 +57,9 @@ class RobotTactic(Enum):
     DUMMY = 4  # play dead
 
 
-def getSimRobotEnv(render_mode=None):
+def getSimRobotEnv(render_mode=None, **kwargs):
     """Create a SimRobot env with layers of wrappers for exception handling."""
-    env = SimRobotEnv(render_mode=render_mode)
+    env = SimRobotEnv(render_mode=render_mode, **kwargs)
     env = wrappers.AssertOutOfBoundsWrapper(env)
     env = wrappers.OrderEnforcingWrapper(env)
     return env
@@ -67,7 +68,11 @@ def getSimRobotEnv(render_mode=None):
 class SimRobotEnv(AECEnv):
     metadata = {"render_modes": ["human"], "name": "SimRobotTraining_v0"}
 
-    def __init__(self, render_mode=None):
+    def __init__(
+        self,
+        render_mode=None,
+        **kwargs,
+    ):
         """
         The init method takes in environment arguments and
          should define the following attributes:
@@ -91,6 +96,12 @@ class SimRobotEnv(AECEnv):
 
         # Simulator pid
         self.simulator_pid = 0  # uninitialized
+        self.env_id = kwargs.get("env_id", random.randint(0, 100000))
+
+        self.pythonEnvPid = os.getpid()
+        self.pythonEnvPrefix = (
+            f"{self.pythonEnvPid}_{self.env_id}_" if not DEBUG else "DEBUG_"
+        )
 
         self._action_spaces = {
             agent: Box(
@@ -121,7 +132,7 @@ class SimRobotEnv(AECEnv):
         self.environmentVariables = {}
         for robot in self.possible_agents:
             self.environmentVariables[robot] = {
-                "PythonEnvPrefix": str(os.getpid()) + "_" if not DEBUG else "DEBUG_",
+                "PythonEnvPrefix": self.pythonEnvPrefix,
                 "RobotTacticList": RobotTacticList,
                 "RobotStateFlagArrayShmSize": len(self.agentRobots),
                 "ActionArrayShmSize": int(np.prod(self.action_space(robot).shape)),
@@ -148,6 +159,9 @@ class SimRobotEnv(AECEnv):
         self.interruptCallback = interruptCallback
         self.rng = np.random.default_rng(55)
 
+    def __del__(self):
+        self.close()
+
     # Gym API Required
 
     def reset(self, seed=None, options=None):
@@ -168,16 +182,13 @@ class SimRobotEnv(AECEnv):
         print("Current Simulator PID:", self.simulator_pid)
         if self.simulator_pid == 0:
             self.writeScenes()
-            if DEBUG:
-                self.simulator_pid = -1  # launch the simulator manually
-            else:
-                self.startSimRobot()
-                print("Simulator launched.")
+            self.simulator_pid = self.launchSimulator(DEBUG)
+            print("Simulator launched.")
         elif self.simulator_pid > 0:
-            if is_zombie(self.simulator_pid):
-                kill_process(self.simulator_pid)
-                self.simulator_pid = 0
-                self.startSimRobot()
+            # Relaunch the simulator if it is dead for some reason
+            if not self.checkSimulatorStatus():
+                self.closeSimulator()
+                self.simulator_pid = self.launchSimulator(DEBUG)
 
         # Handle duplicated reset
         if hasattr(self, "num_moves") and self.num_moves == 0:
@@ -311,7 +322,9 @@ class SimRobotEnv(AECEnv):
 
         # Perform new action
         agentActionShm = self.robotShmManagers[agentNum]["ActionArrayShm"]
-        agentActionRequestFlagShm = self.robotShmManagers[agentNum]["ActionRequestFlagShm"]
+        agentActionRequestFlagShm = self.robotShmManagers[agentNum][
+            "ActionRequestFlagShm"
+        ]
         agentActionShm.sendArray(action)
         agentActionRequestFlagShm.clearSem()  # Respond to the request
 
@@ -395,9 +408,7 @@ class SimRobotEnv(AECEnv):
         or any other environment data which should not be kept around after the
         user is no longer using the environment.
         """
-        if self.simulator_pid > 0:
-            kill_process(self.simulator_pid)
-            self.simulator_pid = 0
+        self.closeSimulator()
 
         self.closeShm()
 
@@ -502,11 +513,12 @@ class SimRobotEnv(AECEnv):
         ) as conFile:
             conFile.write(self.scene["log_con"])
 
-    def startSimRobot(self):
+    def launchSimulator(self, debug=False):
         """
         Launch the simulator based on the platform
         """
-
+        if debug:
+            return -1
         if sys.platform.startswith("win"):
             raise NotImplementedError("Launching SimRobot on Windows not supported")
         elif sys.platform.startswith("darwin"):
@@ -524,39 +536,31 @@ class SimRobotEnv(AECEnv):
             )
         elif sys.platform.startswith("linux"):
             # Compile the SimRobot binary
-            compileCommand = [BADGER_RL_SYSTEM_DIR / "Make/Linux/generate"]
-
-            compileProcess = subprocess.Popen(
-                compileCommand,
-                stdout=subprocess.DEVNULL,
-                cwd=BADGER_RL_SYSTEM_DIR,
-            )
-            compileProcess.wait()
-
-            compileCommand = [
-                BADGER_RL_SYSTEM_DIR / "Make/Linux/compile",
-                "Release",
-                "SimRobot",
+            compileCommands = [
+                [BADGER_RL_SYSTEM_DIR / "Make/Linux/generate"],
+                [
+                    BADGER_RL_SYSTEM_DIR / "Make/Linux/compile",
+                    "Release",
+                    "SimRobot",
+                ],
             ]
-            compileProcess = subprocess.Popen(
-                compileCommand,
-                stdout=subprocess.DEVNULL,
-                cwd=BADGER_RL_SYSTEM_DIR,
-            )
-            compileProcess.wait()
-
+            for cmd in compileCommands:
+                subprocess.run(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    cwd=BADGER_RL_SYSTEM_DIR,
+                    check=True,
+                )
             # Launch the SimRobot Simulator
             runCommand = [
                 str(BADGER_RL_SYSTEM_DIR / "Build/Linux/SimRobot/Release/SimRobot"),
                 "-g",
                 str(BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2"),
             ]
-
             env = os.environ.copy()
+            env["PythonEnvPrefix"] = self.pythonEnvPrefix
 
-            env["PythonEnvPrefix"] = str(os.getpid()) + "_" if not DEBUG else "DEBUG_"
-
-            # TODO: change the output and error file name
+            # runCommand = ["taskset", "-c", "0-7"] + runCommand # Assign big cores
             with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
                 process = subprocess.Popen(
                     runCommand,
@@ -565,12 +569,25 @@ class SimRobotEnv(AECEnv):
                     cwd=BADGER_RL_SYSTEM_DIR,
                     env=env,
                 )
-
         else:
             raise NotImplementedError("Unsupported platform")
+        return process.pid
 
-        self.simulator_pid = process.pid
-        return
+    def checkSimulatorStatus(self):
+        """
+        Check if the simulator process is still running and not a zombie
+        """
+        if self.simulator_pid <= 0:
+            return False
+        return not is_zombie(self.simulator_pid)
+
+    def closeSimulator(self):
+        """
+        Close the simulator process using the existing kill_process function
+        """
+        if self.simulator_pid > 0:
+            print("Closing the simulator with pid ", self.simulator_pid)
+            kill_process(self.simulator_pid)
 
     def resetBallAndRobotPositions(self, seed=None):
         """
@@ -645,21 +662,15 @@ class SimRobotEnv(AECEnv):
         But we don't connect it here
         """
 
-        if DEBUG:
-            pythonEnvPrefix = "DEBUG_"
-        else:
-            pythonEnvPID = os.getpid()
-            pythonEnvPrefix = str(pythonEnvPID) + "_"
-
-        self.globalConfigShm = ShmemHeap(pythonEnvPrefix + "GlobalConfig")
+        self.globalConfigShm = ShmemHeap(self.pythonEnvPrefix + "GlobalConfig")
         self.globalConfig = ShmemAccessor(self.globalConfigShm)
 
-        self.initialPosesShm = ShmemHeap(pythonEnvPrefix + "InitialPoses")
+        self.initialPosesShm = ShmemHeap(self.pythonEnvPrefix + "InitialPoses")
         self.initialPoses = ShmemAccessor(self.initialPosesShm)
 
         # Global shm
         self.globalShmManager = SharedMemoryManager(
-            str(pythonEnvPID) if not DEBUG else "DEBUG",
+            self.pythonEnvPrefix[:-1] if not DEBUG else "DEBUG",
             [
                 (
                     "ActionUpdatedFlagArrayShm",
@@ -680,7 +691,7 @@ class SimRobotEnv(AECEnv):
         # Robot individual shm
         self.robotShmManagers: Dict[int, SharedMemoryManager] = {
             robot: SharedMemoryManager(
-                pythonEnvPrefix + "robot" + str(robot),
+                self.pythonEnvPrefix + "robot" + str(robot),
                 [
                     ("ActionRequestFlagShm", (1,), SHM_VERBOSE),
                     ("ObsArrayShm", (OBS_SIZE,), SHM_VERBOSE),
@@ -692,7 +703,7 @@ class SimRobotEnv(AECEnv):
 
         self.robotExtendedInfoShmems: Dict[Any, ShmemHeap] = {
             robot: ShmemHeap(
-                pythonEnvPrefix + "robot" + str(robot) + "_" + "ExtendedInfo"
+                self.pythonEnvPrefix + "robot" + str(robot) + "_" + "ExtendedInfo"
             )
             for robot in self.agentRobots
         }

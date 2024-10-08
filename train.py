@@ -6,7 +6,7 @@ import gymnasium as gym
 
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
-from tianshou.policy import MultiAgentPolicyManager, PPOPolicy
+from tianshou.policy import PPOPolicy
 from tianshou.trainer import OnpolicyTrainer
 from tianshou.utils.net.common import Net
 from tianshou.utils.net.discrete import Actor
@@ -15,6 +15,7 @@ from tianshou.utils.net.continuous import ActorProb
 from tianshou.utils.net.continuous import Critic as CriticContinuous
 
 from SimRobotAEC import getSimRobotEnv
+from Utils import MultiAgentPolicyManager, RandomPolicy
 
 
 class ActorNetwork(nn.Module):
@@ -122,19 +123,28 @@ def get_agents(env):
 
 if __name__ == "__main__":
     # Step 1: Load the PettingZoo environment
-    env = getSimRobotEnv(render_mode=None)  # Set to "human" for visualization
+    env = getSimRobotEnv(
+        render_mode=None, env_id="Base"
+    )  # Set to "human" for visualization
     env = PettingZooEnv(env)
 
     # Step 2: Create policies for each agent
     policies = get_agents(env)
+    env.close()
 
     # Step 3: Convert the env to vector format
     train_envs = DummyVectorEnv(
-        [lambda: PettingZooEnv(getSimRobotEnv()) for _ in range(1)]
+        [
+            lambda idx=idx: PettingZooEnv(getSimRobotEnv(env_id=f"train{idx}"))
+            for idx in range(1)
+        ]
     )
-    test_envs = DummyVectorEnv(
-        [lambda: PettingZooEnv(getSimRobotEnv()) for _ in range(1)]
-    )
+    # test_envs = DummyVectorEnv(
+    #     [
+    #         lambda idx=idx: PettingZooEnv(getSimRobotEnv(env_id=f"test{idx}"))
+    #         for idx in range(1)
+    #     ]
+    # )
 
     # Step 4: Setup collectors
     train_collector = Collector(
@@ -142,22 +152,28 @@ if __name__ == "__main__":
         train_envs,
         VectorReplayBuffer(20000, len(train_envs)),
     )
-    test_collector = Collector(policies, test_envs)
+    # test_collector = Collector(policies, test_envs)
 
     # Step 5: Training
-    result = OnpolicyTrainer(
+    trainer = OnpolicyTrainer(
         policy=policies,
         train_collector=train_collector,
-        test_collector=test_collector,
+        # test_collector=test_collector,
         max_epoch=50,
         step_per_epoch=1000,
         repeat_per_collect=10,
         episode_per_test=10,
         batch_size=256,
         step_per_collect=2000,
-        stop_fn=lambda mean_reward: mean_reward >= 195,
+        # stop_fn=lambda mean_reward: mean_reward >= 195,
     )
-    print(f'Finished training! Use {result["duration"]}')
+
+    for epoch, epoch_stat, info in trainer:
+        print("Epoch:", epoch)
+        print(epoch_stat)
+        print(info)
+
+    print(f'Finished training! Use {trainer["env_step"]}')
 
     # Step 6: Save the trained policy
     torch.save(policies.state_dict(), "robot_policies.pth")
