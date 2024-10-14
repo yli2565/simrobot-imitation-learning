@@ -1,3 +1,5 @@
-[submodule "BadgerRLSystem"]
-	path = BadgerRLSystem
-	url = git@github.com:yli2565/BadgerRLSystem.git
+[submodule "wistex-system"]
+	path = wistex-system
+	url = git@github.com:wistex-united/wistex-system.git
+	branch = MARL-Env
+	

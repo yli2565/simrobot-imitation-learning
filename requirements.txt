@@ -74,7 +74,6 @@ tomli==2.0.1
 torch==2.4.1
 tqdm==4.66.5
 triton==3.0.0
-TypedShmem @ file:///home/yuhao2024/Documents/SimRobotAEC/BadgerRLSystem/Util/TypedShmem/dist/typedshmem-0.0.1-cp312-cp312-linux_x86_64.whl#sha256=9bd533636fa6bfdcf7dfd81ca1e2c6de742e0251365dc65acf82c31078e3d4d7
 typing_extensions==4.12.2
 tzdata==2024.2
 virtualenv==20.26.5

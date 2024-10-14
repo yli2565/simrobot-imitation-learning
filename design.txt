@@ -1,1 +1,11 @@
-Ok, I planned to build a TianShou training env for 
+Ok, I planned to build a TianShou trianing code
+
+Precheck
+Using llvmpipe? 
+Is typedShmem Installed?
+
+Switch to action dict for more information? Yes, good idea
+
+Make a meaningful reward calculation function
+Make a meaning action
+Make a meaningful 

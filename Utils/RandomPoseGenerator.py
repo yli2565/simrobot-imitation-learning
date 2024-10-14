@@ -14,7 +14,7 @@ from .ConvertCfg2Dict import cfg2dict
 # Parse the provided data
 fieldData = cfg2dict(
     Path(__file__).parent.parent
-    / "BadgerRLSystem"
+    / "wistex-system"
     / "Config/Locations/Default/fieldDimensions.cfg"
 )
 # Create Shapely objects for the field and important areas

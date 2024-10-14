@@ -33,7 +33,7 @@ from Utils import (
     should_use_vglrun,
 )
 
-BADGER_RL_SYSTEM_DIR = Path(__file__).parent / "BadgerRLSystem"
+WISTEX_SYSTEM_DIR = Path(__file__).parent / "wistex-system"
 
 DEBUG_PRINTS = False
 DEBUG = False
@@ -502,15 +502,15 @@ class SimRobotEnv(AECEnv):
         }
         # Write the ros2 and con file
         with open(
-            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
+            WISTEX_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2", "w"
         ) as ros2File:
             ros2File.write(self.scene["ros2"])
         with open(
-            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
+            WISTEX_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.con", "w"
         ) as conFile:
             conFile.write(self.scene["scene_con"])
         with open(
-            BADGER_RL_SYSTEM_DIR / f"Config/Scenes/Includes/{logConName}.con", "w"
+            WISTEX_SYSTEM_DIR / f"Config/Scenes/Includes/{logConName}.con", "w"
         ) as conFile:
             conFile.write(self.scene["log_con"])
 
@@ -527,20 +527,20 @@ class SimRobotEnv(AECEnv):
             command = [
                 "open",
                 "-g",
-                BADGER_RL_SYSTEM_DIR / "Config/Scenes/randomScene.ros2",
+                WISTEX_SYSTEM_DIR / "Config/Scenes/randomScene.ros2",
             ]
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                cwd=BADGER_RL_SYSTEM_DIR,
+                cwd=WISTEX_SYSTEM_DIR,
             )
         elif sys.platform.startswith("linux"):
             # Compile the SimRobot binary
             compileCommands = [
-                [BADGER_RL_SYSTEM_DIR / "Make/Linux/generate"],
+                [WISTEX_SYSTEM_DIR / "Make/Linux/generate"],
                 [
-                    BADGER_RL_SYSTEM_DIR / "Make/Linux/compile",
+                    WISTEX_SYSTEM_DIR / "Make/Linux/compile",
                     "Release",
                     "SimRobot",
                 ],
@@ -549,14 +549,14 @@ class SimRobotEnv(AECEnv):
                 subprocess.run(
                     cmd,
                     stdout=subprocess.DEVNULL,
-                    cwd=BADGER_RL_SYSTEM_DIR,
+                    cwd=WISTEX_SYSTEM_DIR,
                     check=True,
                 )
             # Launch the SimRobot Simulator
             runCommand = [
-                str(BADGER_RL_SYSTEM_DIR / "Build/Linux/SimRobot/Release/SimRobot"),
+                str(WISTEX_SYSTEM_DIR / "Build/Linux/SimRobot/Release/SimRobot"),
                 "-g",
-                str(BADGER_RL_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2"),
+                str(WISTEX_SYSTEM_DIR / f"Config/Scenes/{self.sceneName}.ros2"),
             ]
             env = os.environ.copy()
             env["PythonEnvPrefix"] = self.pythonEnvPrefix
@@ -570,7 +570,7 @@ class SimRobotEnv(AECEnv):
                     runCommand,
                     stdout=outFile,
                     stderr=errFile,
-                    cwd=BADGER_RL_SYSTEM_DIR,
+                    cwd=WISTEX_SYSTEM_DIR,
                     env=env,
                 )
         else:

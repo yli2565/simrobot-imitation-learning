@@ -29,7 +29,7 @@ done
 curDir="$PWD"
 
 # Change to the TypedShmem directory
-cd BadgerRLSystem/Util/TypedShmem || { echo "Error: Directory not found"; exit 1; }
+cd wistex-system/Util/TypedShmem || { echo "Error: Directory not found"; exit 1; }
 
 echo "Building wheel..."
 python3 -m build -w --verbose --no-isolation || { echo "Error: Wheel build failed"; exit 1; }

@@ -79,5 +79,5 @@ def cfg2dict(filePath):
 
 if __name__ == "__main__":
     # Path to fieldDimensions.cfg
-    FieldDim=cfg2dict("<Path to BHuman/BadgerRLSystem repo root>/Config/Locations/Default/fieldDimensions.cfg")
+    FieldDim=cfg2dict("<Path to BHuman/wistex-system repo root>/Config/Locations/Default/fieldDimensions.cfg")
     print(FieldDim)
