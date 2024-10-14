@@ -19,6 +19,8 @@ temp
 *.csv
 *.bak
 *.tar
+*.svg
+*.data
 
 # misc
 testenv

@@ -30,6 +30,7 @@ from Utils import (
     generateSceneCon,
     is_zombie,
     kill_process,
+    should_use_vglrun,
 )
 
 BADGER_RL_SYSTEM_DIR = Path(__file__).parent / "BadgerRLSystem"
@@ -559,8 +560,11 @@ class SimRobotEnv(AECEnv):
             ]
             env = os.environ.copy()
             env["PythonEnvPrefix"] = self.pythonEnvPrefix
+            # print(" ".join(runCommand))
+            # runCommand = ["taskset", "-c", "0-14"] + runCommand # Assign big cores
+            if should_use_vglrun():
+                runCommand = ["vglrun"] + runCommand
 
-            # runCommand = ["taskset", "-c", "0-7"] + runCommand # Assign big cores
             with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
                 process = subprocess.Popen(
                     runCommand,

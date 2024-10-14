@@ -1,12 +1,10 @@
 from .ConvertCfg2Dict import cfg2dict
-from .GameState import (CompetitionPhase, GameControllerState, GameState,
-                        Phase, State)
-from .GeneralUtils import is_zombie, kill_process
+from .GameState import CompetitionPhase, GameControllerState, GameState, Phase, State
+from .GeneralUtils import is_zombie, kill_process, should_use_vglrun
 from .GenerateScene import generateLogCon, generateRos2, generateSceneCon
 from .Observation_Adam import Observation as ObservationAdam
 from .Observation_Josh import Observation as ObservationJosh
-from .RandomPoseGenerator import (SoccerFieldAreas, SoccerFieldPoints,
-                                  generatePoses)
+from .RandomPoseGenerator import SoccerFieldAreas, SoccerFieldPoints, generatePoses
 from .RobotSelector import RobotSelector
 
 from .RandomPolicy import RandomPolicy
@@ -17,6 +15,7 @@ __all__ = [
     "cfg2dict",
     "is_zombie",
     "kill_process",
+    "should_use_vglrun",
     # Generate Scene Files
     "generateSceneCon",
     "generateLogCon",
