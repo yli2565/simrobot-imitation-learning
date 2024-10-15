@@ -20,10 +20,14 @@ from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import (BasePolicy, DQNPolicy, MultiAgentPolicyManager,
-                             RandomPolicy)
+                             RandomPolicy,PPOPolicy)
 from tianshou.trainer import OffpolicyTrainer
 from tianshou.utils.net.common import Net
-
+from tianshou.utils.net.discrete import Actor
+from tianshou.utils.net.discrete import Critic as CriticDiscrete
+from tianshou.utils.net.continuous import ActorProb
+from tianshou.utils.net.continuous import Critic as CriticContinuous
+from torch.distributions import Categorical, Normal
 
 def _get_agents(
     agent_learn: Optional[BasePolicy] = None,
@@ -54,7 +58,6 @@ def _get_agents(
             estimation_step=3,
             target_update_freq=320,
         )
-
     if agent_opponent is None:
         agent_opponent = RandomPolicy(action_space=env.action_space)
 

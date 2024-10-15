@@ -9,14 +9,150 @@ from matplotlib.patches import Polygon as PlotPolygon
 from shapely import MultiPolygon, unary_union
 from shapely.geometry import Point, Polygon, box
 
-from .ConvertCfg2Dict import cfg2dict
+# from .ConvertCfg2Dict import cfg2dict
 
 # Parse the provided data
-fieldData = cfg2dict(
-    Path(__file__).parent.parent
-    / "wistex-system"
-    / "Config/Locations/Default/fieldDimensions.cfg"
-)
+# fieldData = cfg2dict(
+#     Path(__file__).parent.parent
+#     / "wistex-system"
+#     / "Config/Locations/Default/fieldDimensions.cfg"
+# )
+fieldData = {
+    "xPosOpponentFieldBorder": 5200,
+    "xPosOpponentGoal": 5055,
+    "xPosOpponentGoalPost": 4525,
+    "xPosOpponentGroundLine": 4500,
+    "xPosOpponentGoalArea": 3900,
+    "xPosOpponentPenaltyMark": 3200,
+    "xPosOpponentPenaltyArea": 2850,
+    "xPosPenaltyStrikerStartPosition": 2850,
+    "xPosHalfWayLine": 0,
+    "xPosOwnPenaltyArea": -2850,
+    "xPosOwnPenaltyMark": -3200,
+    "xPosOwnGoalArea": -3900,
+    "xPosOwnGroundLine": -4500,
+    "xPosOwnGoalPost": -4525,
+    "xPosOwnGoal": -5055,
+    "xPosOwnFieldBorder": -5200,
+    "yPosLeftFieldBorder": 3700,
+    "yPosLeftSideline": 3000,
+    "yPosLeftPenaltyArea": 2000,
+    "yPosLeftGoalArea": 1100,
+    "yPosLeftGoal": 800,
+    "yPosRightGoal": -800,
+    "yPosRightGoalArea": -1100,
+    "yPosRightPenaltyArea": -2000,
+    "yPosRightSideline": -3000,
+    "yPosRightFieldBorder": -3700,
+    "fieldLinesWidth": 50,
+    "centerCircleRadius": 750,
+    "goalPostRadius": 50,
+    "crossBarRadius": 50,
+    "goalHeight": 900,
+    "penaltyMarkSize": 100,
+    "goalFrameLines": [
+        {"from": {"x": -4525, "y": 800}, "to": {"x": -5055, "y": 800}},
+        {"from": {"x": -5055, "y": 800}, "to": {"x": -5055, "y": -800}},
+        {"from": {"x": -4525, "y": -800}, "to": {"x": -5055, "y": -800}},
+        {"from": {"x": 4525, "y": 800}, "to": {"x": 5055, "y": 800}},
+        {"from": {"x": 5055, "y": 800}, "to": {"x": 5055, "y": -800}},
+        {"from": {"x": 4525, "y": -800}, "to": {"x": 5055, "y": -800}},
+    ],
+    "fieldLines": [
+        {"from": {"x": 4500, "y": -3000}, "to": {"x": 4500, "y": 3000}},
+        {"from": {"x": 4500, "y": 3000}, "to": {"x": -4500, "y": 3000}},
+        {"from": {"x": -4500, "y": 3000}, "to": {"x": -4500, "y": -3000}},
+        {"from": {"x": -4500, "y": -3000}, "to": {"x": 4500, "y": -3000}},
+        {"from": {"x": 0, "y": 3000}, "to": {"x": 0, "y": -3000}},
+        {"from": {"x": -4500, "y": 1100}, "to": {"x": -3900, "y": 1100}},
+        {"from": {"x": -3900, "y": 1100}, "to": {"x": -3900, "y": -1100}},
+        {"from": {"x": -3900, "y": -1100}, "to": {"x": -4500, "y": -1100}},
+        {"from": {"x": 4500, "y": 1100}, "to": {"x": 3900, "y": 1100}},
+        {"from": {"x": 3900, "y": 1100}, "to": {"x": 3900, "y": -1100}},
+        {"from": {"x": 3900, "y": -1100}, "to": {"x": 4500, "y": -1100}},
+        {"from": {"x": -4500, "y": 2000}, "to": {"x": -2850, "y": 2000}},
+        {"from": {"x": -2850, "y": 2000}, "to": {"x": -2850, "y": -2000}},
+        {"from": {"x": -2850, "y": -2000}, "to": {"x": -4500, "y": -2000}},
+        {"from": {"x": 4500, "y": 2000}, "to": {"x": 2850, "y": 2000}},
+        {"from": {"x": 2850, "y": 2000}, "to": {"x": 2850, "y": -2000}},
+        {"from": {"x": 2850, "y": -2000}, "to": {"x": 4500, "y": -2000}},
+        {"from": {"x": 3150, "y": 0}, "to": {"x": 3250, "y": 0}},
+        {"from": {"x": 3200, "y": -50}, "to": {"x": 3200, "y": 50}},
+        {"from": {"x": -3150, "y": 0}, "to": {"x": -3250, "y": 0}},
+        {"from": {"x": -3200, "y": -50}, "to": {"x": -3200, "y": 50}},
+        {"from": {"x": -50, "y": 0}, "to": {"x": 50, "y": 0}},
+    ],
+    "centerCircle": {"center": {"x": 0, "y": 0}, "radius": 750, "numOfSegments": 16},
+    "corners": {
+        "xCorner": [{"x": 0, "y": 750}, {"x": 0, "y": -750}],
+        "tCorner0": [
+            {"x": 0, "y": 750},
+            {"x": 0, "y": -750},
+            {"x": -4500, "y": 2000},
+            {"x": -4500, "y": -2000},
+            {"x": -4500, "y": 1100},
+            {"x": -4500, "y": -1100},
+        ],
+        "tCorner90": [{"x": 0, "y": 750}, {"x": 0, "y": -750}, {"x": 0, "y": -3000}],
+        "tCorner180": [
+            {"x": 0, "y": 750},
+            {"x": 0, "y": -750},
+            {"x": 4500, "y": 2000},
+            {"x": 4500, "y": -2000},
+            {"x": 4500, "y": 1100},
+            {"x": 4500, "y": -1100},
+        ],
+        "tCorner270": [{"x": 0, "y": 750}, {"x": 0, "y": -750}, {"x": 0, "y": 3000}],
+        "lCorner0": [
+            {"x": 0, "y": 750},
+            {"x": 0, "y": -750},
+            {"x": -4500, "y": 2000},
+            {"x": -4500, "y": -2000},
+            {"x": -4500, "y": 1100},
+            {"x": -4500, "y": -1100},
+            {"x": 0, "y": -3000},
+            {"x": -4500, "y": -3000},
+            {"x": 2850, "y": -2000},
+            {"x": 3900, "y": -1100},
+        ],
+        "lCorner90": [
+            {"x": 0, "y": 750},
+            {"x": 0, "y": -750},
+            {"x": 4500, "y": 2000},
+            {"x": 4500, "y": -2000},
+            {"x": 4500, "y": 1100},
+            {"x": 4500, "y": -1100},
+            {"x": 0, "y": -3000},
+            {"x": 4500, "y": -3000},
+            {"x": -2850, "y": -2000},
+            {"x": -3900, "y": -1100},
+        ],
+        "lCorner180": [
+            {"x": 0, "y": 750},
+            {"x": 0, "y": -750},
+            {"x": 4500, "y": 2000},
+            {"x": 4500, "y": -2000},
+            {"x": 4500, "y": 1100},
+            {"x": 4500, "y": -1100},
+            {"x": 0, "y": 3000},
+            {"x": 4500, "y": 3000},
+            {"x": -2850, "y": 2000},
+            {"x": -3900, "y": 1100},
+        ],
+        "lCorner270": [
+            {"x": 0, "y": 750},
+            {"x": 0, "y": -750},
+            {"x": -4500, "y": 2000},
+            {"x": -4500, "y": -2000},
+            {"x": -4500, "y": 1100},
+            {"x": -4500, "y": -1100},
+            {"x": 0, "y": 3000},
+            {"x": -4500, "y": 3000},
+            {"x": 2850, "y": 2000},
+            {"x": 3900, "y": 1100},
+        ],
+    },
+}
 # Create Shapely objects for the field and important areas
 
 
@@ -68,6 +204,18 @@ class SoccerFieldAreas:
         fieldData["yPosRightPenaltyArea"],
         fieldData["xPosOpponentGroundLine"],
         fieldData["yPosLeftPenaltyArea"],
+    )
+    ownGoal: Polygon = box(
+        fieldData["xPosOwnGoal"],
+        fieldData["yPosRightGoal"],
+        fieldData["xPosOwnGroundLine"],
+        fieldData["yPosLeftGoal"],
+    )
+    opponentGoal: Polygon = box(
+        fieldData["xPosOpponentGoal"],
+        fieldData["yPosRightGoal"],
+        fieldData["xPosOpponentGroundLine"],
+        fieldData["yPosLeftGoal"],
     )
     ownGoalArea: Polygon = box(
         fieldData["xPosOwnGroundLine"],
@@ -156,13 +304,15 @@ def visualizeField(highlightArea=None, randomPoses=None):
 
     # Plot areas
     areas = [
-        (SoccerFieldPoints.centerCircle, "black", 0.5),
-        (SoccerFieldPoints.ownHalf, "blue", 0.1),
-        (SoccerFieldPoints.opponentHalf, "red", 0.1),
-        (SoccerFieldPoints.ownPenaltyArea, "blue", 0.2),
-        (SoccerFieldPoints.opponentPenaltyArea, "red", 0.2),
-        (SoccerFieldPoints.ownGoalArea, "blue", 0.3),
-        (SoccerFieldPoints.opponentGoalArea, "red", 0.3),
+        (SoccerFieldAreas.centerCircle, "black", 0.5),
+        (SoccerFieldAreas.ownHalf, "blue", 0.1),
+        (SoccerFieldAreas.opponentHalf, "red", 0.1),
+        (SoccerFieldAreas.ownPenaltyArea, "blue", 0.2),
+        (SoccerFieldAreas.opponentPenaltyArea, "red", 0.2),
+        (SoccerFieldAreas.ownGoalArea, "blue", 0.3),
+        (SoccerFieldAreas.ownGoal, "purple", 0.3),
+        (SoccerFieldAreas.opponentGoal, "purple", 0.3),
+        (SoccerFieldAreas.opponentGoalArea, "red", 0.3),
     ]
 
     for area, color, alpha in areas:

@@ -15,6 +15,7 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
 from shapely import Point
 from TypedShmem import SDict, ShmemAccessor, ShmemHeap, SList
+import shapely
 
 from InterThreadCommunication import SharedMemoryHelper, SharedMemoryManager
 from Utils import (
@@ -258,6 +259,7 @@ class SimRobotEnv(AECEnv):
         while self.robotExtendedInfoShmems[agentNum].getCounterSemValue() == 0:
             pass
         self.extendedInfos[agent] = self.robotExtendedInfos[agentNum].fetch()
+        self.preprocessExtendedInfo(self.extendedInfos[agent])
         print(self.extendedInfos[agent])
         return self.observations[agent]
 
@@ -293,7 +295,7 @@ class SimRobotEnv(AECEnv):
         # Calculate reward
         extendedInfo = self.extendedInfos[agent]
         print("Robot {} ExtendedInfo: {}".format(self.agent_selection, extendedInfo))
-        self.rewards[agent] = self.calcReward(extendedInfo["GroundTruth"])
+        self.rewards[agent] = self.calcReward(extendedInfo)
 
         robotGameControllerStatePerception = GameControllerState(
             extendedInfo["GameControllerState"]
@@ -560,11 +562,13 @@ class SimRobotEnv(AECEnv):
             ]
             env = os.environ.copy()
             env["PythonEnvPrefix"] = self.pythonEnvPrefix
-            # print(" ".join(runCommand))
             # runCommand = ["taskset", "-c", "0-14"] + runCommand # Assign big cores
             if should_use_vglrun():
                 runCommand = ["vglrun"] + runCommand
 
+            # runCommand = ["sudo", "-E", "perf", "record", "-g"] + runCommand
+
+            print(" ".join(runCommand))
             with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
                 process = subprocess.Popen(
                     runCommand,
@@ -613,10 +617,10 @@ class SimRobotEnv(AECEnv):
         )[0]
 
         area = SoccerFieldAreas.ownPenaltyArea.difference(SoccerFieldAreas.ownGoalArea)
-        candidatePos: List[Point] = generatePoses(area, len(self.team1), rng=rng)
+        candidatePos: List[Point] = generatePoses(area, len(self.team2), rng=rng)
 
-        for robot in self.team1:
-            if robot == 1:
+        for robot in self.team2:
+            if robot % 20 == 1:
                 purposedInitialPose[str(robot)] = generatePoses(
                     SoccerFieldAreas.ownGoalArea, 1, rng=rng
                 )[0]
@@ -626,10 +630,10 @@ class SimRobotEnv(AECEnv):
         area = SoccerFieldAreas.opponentPenaltyArea.difference(
             SoccerFieldAreas.opponentGoalArea
         )
-        candidatePos = generatePoses(area, len(self.team2), rng=rng)
+        candidatePos = generatePoses(area, len(self.team1), rng=rng)
 
-        for robot in self.team2:
-            if robot == 21:
+        for robot in self.team1:
+            if robot % 20 == 1:
                 purposedInitialPose[str(robot)] = generatePoses(
                     SoccerFieldAreas.opponentGoalArea, 1, rng=rng
                 )[0]
@@ -653,11 +657,127 @@ class SimRobotEnv(AECEnv):
 
         return purposedInitialPose
 
+    def preprocessExtendedInfo(self, extendedInfo: Dict[str, Any]) -> None:
+        eachPlayerSize = 5
+        eachBallSize = 6
+        lst = extendedInfo["ownTeamPlayers"]
+        extendedInfo["ownTeamPlayers"] = [
+            {
+                "number": int(lst[i + 0]),
+                "translation": (lst[i + 1], lst[i + 2]),
+                "rotation": lst[i + 3],
+                "upright": lst[i + 4] == 1.0,
+            }
+            for i in range(0, len(lst), eachPlayerSize)
+        ]
+
+        lst = extendedInfo["opponentTeamPlayers"]
+        extendedInfo["opponentTeamPlayers"] = [
+            {
+                "number": int(lst[i + 0]),
+                "translation": (lst[i + 1], lst[i + 2]),
+                "rotation": lst[i + 3],
+                "upright": lst[i + 4] == 1.0,
+            }
+            for i in range(0, len(lst), eachPlayerSize)
+        ]
+
+        lst = extendedInfo["balls"]
+        extendedInfo["balls"] = [
+            {
+                "position": (lst[i + 0], lst[i + 1], lst[i + 2]),
+                "velocity": (lst[i + 3], lst[i + 4], lst[i + 5]),
+            }
+            for i in range(0, len(lst), eachBallSize)
+        ]
+
+        lst = extendedInfo["ownPose"]
+        extendedInfo["ownPose"] = {
+            "translation": (lst[0], lst[1]),
+            "rotation": lst[2],
+        }
+
+        teams = extendedInfo["gameControllerData_teams"]
+        teamsTmp = []
+        for i in [0, 1]:
+            idx = i * 2 * 20
+            players = extendedInfo["gameControllerData_players"]
+            playersTmp = []
+            for j in range(idx, idx + 2 * 20, 2):
+                playersTmp.append(
+                    {
+                        "penalty": int(players[j + 0]),
+                        "secsTillUnpenalised": players[j + 1],
+                    }
+                )
+
+            idx = i * 8
+            teamsTmp.append(
+                {
+                    "teamNumber": int(teams[idx + 0]),
+                    "fieldPlayerColor": int(teams[idx + 1]),
+                    "goalkeeperColor": int(teams[idx + 2]),
+                    "goalkeeper": int(teams[idx + 3]),
+                    "score": int(teams[idx + 4]),
+                    "penaltyShot": int(teams[idx + 5]),
+                    "singleShots": int(teams[idx + 6]),
+                    "messageBudget": int(teams[idx + 7]),
+                    "players": playersTmp,
+                }
+            )
+
+        gameControllerData = {
+            "packetNumber": int(extendedInfo["gameControllerData"][0]),
+            "playersPerTeam": int(extendedInfo["gameControllerData"][1]),
+            "competitionPhase": (extendedInfo["gameControllerData"][2]),
+            "competitionType": (extendedInfo["gameControllerData"][3]),
+            "gamePhase": (extendedInfo["gameControllerData"][4]),
+            "state": (extendedInfo["gameControllerData"][5]),
+            "setPlay": (extendedInfo["gameControllerData"][6]),
+            "firstHalf": (extendedInfo["gameControllerData"][7]),
+            "kickingTeam": (extendedInfo["gameControllerData"][8]),
+            "secsRemaining": (extendedInfo["gameControllerData"][9]),
+            "secondaryTime": int(extendedInfo["gameControllerData"][10]),
+            "teams": teamsTmp,
+            "timeLastPacketReceived": int(extendedInfo["gameControllerData"][-2]),
+            "isTrueData": extendedInfo["gameControllerData"][-1] == 1.0,
+        }
+
+        extendedInfo["gameControllerData"] = gameControllerData
+        del extendedInfo["gameControllerData_teams"]
+        del extendedInfo["gameControllerData_players"]
+
     def calcReward(self, extendedInfo: Dict[str, Any]) -> float:
         """
         Calculate the reward for the agent from extended info, which include some groundTruth information of the game status
         """
-        return 1
+        ballPos = extendedInfo["balls"][0]["position"]
+        ballPos = shapely.Point(
+            ballPos[0],
+            ballPos[1],
+        )
+        ownPos = extendedInfo["ownPose"]["translation"]
+        ownPos = shapely.Point(ownPos[0], ownPos[1])
+        ownGoal = (
+            SoccerFieldAreas.ownGoal
+            if int(self.agent_selection) in self.team1
+            else SoccerFieldAreas.opponentGoal
+        )
+        opponentGoal = (
+            SoccerFieldAreas.opponentGoal
+            if int(self.agent_selection) in self.team1
+            else SoccerFieldAreas.ownGoal
+        )
+
+        if ownGoal.contains(ballPos):
+            return -1
+
+        if opponentGoal.contains(ballPos):
+            return 1
+
+        # if not SoccerFieldAreas.fieldBoundary.contains(ballPos):
+
+        return 0
 
     def configShm(self):
         """
@@ -668,6 +788,9 @@ class SimRobotEnv(AECEnv):
 
         self.globalConfigShm = ShmemHeap(self.pythonEnvPrefix + "GlobalConfig")
         self.globalConfig = ShmemAccessor(self.globalConfigShm)
+
+        self.pythonBoardCastShm = ShmemHeap(self.pythonEnvPrefix + "PythonBoardCast")
+        self.pythonBoardCast = ShmemAccessor(self.pythonBoardCastShm)
 
         self.initialPosesShm = ShmemHeap(self.pythonEnvPrefix + "InitialPoses")
         self.initialPoses = ShmemAccessor(self.initialPosesShm)
@@ -720,6 +843,7 @@ class SimRobotEnv(AECEnv):
         """Unlink(delete) the shared memory blocks"""
 
         self.globalConfigShm.create()
+        self.pythonBoardCastShm.create()
         self.initialPosesShm.create()
 
         self.globalConfig.set(self.environmentVariables[self.possible_agents[0]])

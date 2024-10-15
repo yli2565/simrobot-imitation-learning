@@ -168,11 +168,18 @@ if __name__ == "__main__":
         # stop_fn=lambda mean_reward: mean_reward >= 195,
     )
 
-    for epoch, epoch_stat, info in trainer:
-        print("Epoch:", epoch)
-        print(epoch_stat)
-        print(info)
+    for epochStates in trainer:
+        epoch=epochStates.epoch
+        train_collect_stat=epochStates.train_collect_stat
+        test_collect_stat=epochStates.test_collect_stat
+        training_stat=epochStates.training_stat
+        info_stat=epochStates.info_stat
 
+        print("Epoch:", epoch)
+        print(train_collect_stat)
+        print(test_collect_stat)
+        print(training_stat)
+        print(info_stat)
     print(f'Finished training! Use {trainer["env_step"]}')
 
     # Step 6: Save the trained policy
