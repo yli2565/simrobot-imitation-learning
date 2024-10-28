@@ -1,19 +1,22 @@
+import gymnasium as gym
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical, Normal
-from torch.optim import Adam
-import gymnasium as gym
-
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
 from tianshou.policy import PPOPolicy
 from tianshou.trainer import OnpolicyTrainer
+from tianshou.utils.logger.tensorboard import TensorboardLogger
+from tianshou.utils.logger.wandb import WandbLogger
 from tianshou.utils.net.common import Net
-from tianshou.utils.net.discrete import Actor
-from tianshou.utils.net.discrete import Critic as CriticDiscrete
 from tianshou.utils.net.continuous import ActorProb
 from tianshou.utils.net.continuous import Critic as CriticContinuous
+from tianshou.utils.net.discrete import Actor
+from tianshou.utils.net.discrete import Critic as CriticDiscrete
+from torch.distributions import Categorical, Normal
+from torch.optim import Adam
+from torch.utils.tensorboard import SummaryWriter
 
+import wandb
 from SimRobotAEC import getSimRobotEnv
 from Utils import MultiAgentPolicyManager, RandomPolicy
 
@@ -154,6 +157,10 @@ if __name__ == "__main__":
     )
     # test_collector = Collector(policies, test_envs)
 
+    # wandb.init()
+    logger = TensorboardLogger(SummaryWriter("./tensorboard"))
+    # logger.load()
+
     # Step 5: Training
     trainer = OnpolicyTrainer(
         policy=policies,
@@ -165,21 +172,19 @@ if __name__ == "__main__":
         episode_per_test=10,
         batch_size=256,
         step_per_collect=2000,
+        logger=logger,
         # stop_fn=lambda mean_reward: mean_reward >= 195,
     )
 
     for epochStates in trainer:
-        epoch=epochStates.epoch
-        train_collect_stat=epochStates.train_collect_stat
-        test_collect_stat=epochStates.test_collect_stat
-        training_stat=epochStates.training_stat
-        info_stat=epochStates.info_stat
+        epoch = epochStates.epoch
+        train_collect_stat = epochStates.train_collect_stat
+        test_collect_stat = epochStates.test_collect_stat
+        training_stat = epochStates.training_stat
+        info_stat = epochStates.info_stat
 
-        print("Epoch:", epoch)
-        print(train_collect_stat)
-        print(test_collect_stat)
-        print(training_stat)
-        print(info_stat)
+        pass
+
     print(f'Finished training! Use {trainer["env_step"]}')
 
     # Step 6: Save the trained policy

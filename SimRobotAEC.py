@@ -181,11 +181,11 @@ class SimRobotEnv(AECEnv):
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
         # Reset simulator (If the simulator is not running, launch it)
-        print("Current Simulator PID:", self.simulator_pid)
+        # print("Current Simulator PID:", self.simulator_pid)
         if self.simulator_pid == 0:
             self.writeScenes()
             self.simulator_pid = self.launchSimulator(DEBUG)
-            print("Simulator launched.")
+            # print("Simulator launched.")
         elif self.simulator_pid > 0:
             # Relaunch the simulator if it is dead for some reason
             if not self.checkSimulatorStatus():
@@ -238,7 +238,7 @@ class SimRobotEnv(AECEnv):
 
         # This will wait until a robot return the first observation
         self.agent_selection = self._agent_selector.next()
-        print(f"Reset Agent selection: {self.agent_selection}")
+        # print(f"Reset Agent selection: {self.agent_selection}")
 
     def observe(self, agent):
         """
@@ -260,7 +260,8 @@ class SimRobotEnv(AECEnv):
             pass
         self.extendedInfos[agent] = self.robotExtendedInfos[agentNum].fetch()
         self.preprocessExtendedInfo(self.extendedInfos[agent])
-        print(self.extendedInfos[agent])
+        self.preprocessObservation(self.observations[agent])
+        # print(self.observations[agent])
         return self.observations[agent]
 
     def step(self, action):
@@ -282,11 +283,11 @@ class SimRobotEnv(AECEnv):
         ):
             oldagent = self.agent_selection
             self._was_dead_step(action)
-            print(
-                "Remove agent {}, current selection {}".format(
-                    oldagent, self.agent_selection
-                )
-            )
+            # print(
+            #     "Remove agent {}, current selection {}".format(
+            #         oldagent, self.agent_selection
+            #     )
+            # )
             return
 
         agent = self.agent_selection
@@ -294,7 +295,7 @@ class SimRobotEnv(AECEnv):
 
         # Calculate reward
         extendedInfo = self.extendedInfos[agent]
-        print("Robot {} ExtendedInfo: {}".format(self.agent_selection, extendedInfo))
+        # print("Robot {} ExtendedInfo: {}".format(self.agent_selection, extendedInfo))
         self.rewards[agent] = self.calcReward(extendedInfo)
 
         robotGameControllerStatePerception = GameControllerState(
@@ -303,19 +304,19 @@ class SimRobotEnv(AECEnv):
         gameStatePerception = State(extendedInfo["GameState"])
 
         if GameControllerState.STATE_READY == robotGameControllerStatePerception:
-            print(
-                "Robot {} terminate because of {}".format(
-                    self.agent_selection, "GameControllerState"
-                )
-            )
+            # print(
+            #     "Robot {} terminate because of {}".format(
+            #         self.agent_selection, "GameControllerState"
+            #     )
+            # )
             self.terminations[self.agent_selection] = True
 
         if not GameState.isPlaying(gameStatePerception):
-            print(
-                "Robot {} terminate because of {}".format(
-                    self.agent_selection, "RobotGameState"
-                )
-            )
+            # print(
+            #     "Robot {} terminate because of {}".format(
+            #         self.agent_selection, "RobotGameState"
+            #     )
+            # )
             self.terminations[self.agent_selection] = True
 
         # Update termination / truncation according to ground truth
@@ -354,7 +355,7 @@ class SimRobotEnv(AECEnv):
         # If all robots are terminated, no need to wait
         if not all(self.terminations.values()):
             self.agent_selection = self._agent_selector.next()
-            print(f"Agent selection: {self.agent_selection}")
+            # print(f"Agent selection: {self.agent_selection}")
 
     def _was_dead_step(self, action) -> None:
         """Minor change: Instead of using self._skip_agent_selection to determine the next agent, directly call self._agent_selector.next() to get the next agent."""
@@ -452,17 +453,17 @@ class SimRobotEnv(AECEnv):
         # The agent number of a robot is its robot number - 1. For example, robot 1 is agent 0
 
         # Each robot is controlled by a RL agent
-        self.agentRobots = [5, 24]  # Use PolicyControl
+        self.agentRobots = [5]  # Use PolicyControl
 
         # Each dummy robot is just an obstacle. Their position can be set during reset
-        self.dummyRobots = [1, 21]  # Play Dead
+        self.dummyRobots = [21]  # Play Dead
         self.BhumanRobots = [
-            3,
-            23,
+            # 3,
+            # 23,
         ]  # Robots following Bhuman code # Use BHuman's control logic
         self.hijackedRobots = [
-            7,
-            27,
+            # 7,
+            # 27,
         ]  # Robots following hard coded logic # Use Static Control logic in StaticControl.cpp
 
         # Verification part
@@ -568,7 +569,7 @@ class SimRobotEnv(AECEnv):
 
             # runCommand = ["sudo", "-E", "perf", "record", "-g"] + runCommand
 
-            print(" ".join(runCommand))
+            # print(" ".join(runCommand))
             with open("output.txt", "w") as outFile, open("error.txt", "w") as errFile:
                 process = subprocess.Popen(
                     runCommand,
@@ -594,7 +595,7 @@ class SimRobotEnv(AECEnv):
         Close the simulator process using the existing kill_process function
         """
         if self.simulator_pid > 0:
-            print("Closing the simulator with pid ", self.simulator_pid)
+            # print("Closing the simulator with pid ", self.simulator_pid)
             kill_process(self.simulator_pid)
 
     def resetBallAndRobotPositions(self, seed=None):
@@ -613,13 +614,13 @@ class SimRobotEnv(AECEnv):
             rng = self.rng
 
         initialBallPose: Point = generatePoses(
-            SoccerFieldAreas.centerCircle, 1, rng=rng
+            SoccerFieldAreas.ownGoalArea, 1, rng=rng
         )[0]
 
         area = SoccerFieldAreas.ownPenaltyArea.difference(SoccerFieldAreas.ownGoalArea)
-        candidatePos: List[Point] = generatePoses(area, len(self.team2), rng=rng)
+        candidatePos: List[Point] = generatePoses(area, len(self.team1), rng=rng)
 
-        for robot in self.team2:
+        for robot in self.team1:
             if robot % 20 == 1:
                 purposedInitialPose[str(robot)] = generatePoses(
                     SoccerFieldAreas.ownGoalArea, 1, rng=rng
@@ -627,15 +628,13 @@ class SimRobotEnv(AECEnv):
             else:
                 purposedInitialPose[str(robot)] = candidatePos.pop()
 
-        area = SoccerFieldAreas.opponentPenaltyArea.difference(
-            SoccerFieldAreas.opponentGoalArea
-        )
-        candidatePos = generatePoses(area, len(self.team1), rng=rng)
+        area = SoccerFieldAreas.ownPenaltyArea.difference(SoccerFieldAreas.ownGoalArea)
+        candidatePos = generatePoses(area, len(self.team2), rng=rng)
 
-        for robot in self.team1:
+        for robot in self.team2:
             if robot % 20 == 1:
                 purposedInitialPose[str(robot)] = generatePoses(
-                    SoccerFieldAreas.opponentGoalArea, 1, rng=rng
+                    SoccerFieldAreas.ownGoalArea, 1, rng=rng
                 )[0]
             else:
                 purposedInitialPose[str(robot)] = candidatePos.pop()
@@ -657,9 +656,15 @@ class SimRobotEnv(AECEnv):
 
         return purposedInitialPose
 
-    def preprocessExtendedInfo(self, extendedInfo: Dict[str, Any]) -> None:
+    def preprocessObservation(self, observation: List[float]) -> List[float]:
+        observation = [d / 1500 for d in observation]
+
+        return observation
+
+    def preprocessExtendedInfo(self, extendedInfo: Dict[str, Any]) -> Dict[str, Any]:
         eachPlayerSize = 5
         eachBallSize = 6
+
         lst = extendedInfo["ownTeamPlayers"]
         extendedInfo["ownTeamPlayers"] = [
             {
@@ -696,6 +701,17 @@ class SimRobotEnv(AECEnv):
             "translation": (lst[0], lst[1]),
             "rotation": lst[2],
         }
+
+        extendedInfo["groundTruthWorldState"] = {
+            "ownTeamPlayers": extendedInfo["ownTeamPlayers"],
+            "opponentTeamPlayers": extendedInfo["opponentTeamPlayers"],
+            "balls": extendedInfo["balls"],
+            "ownPose": extendedInfo["ownPose"],
+        }
+        del extendedInfo["ownTeamPlayers"]
+        del extendedInfo["opponentTeamPlayers"]
+        del extendedInfo["balls"]
+        del extendedInfo["ownPose"]
 
         teams = extendedInfo["gameControllerData_teams"]
         teamsTmp = []
@@ -747,16 +763,24 @@ class SimRobotEnv(AECEnv):
         del extendedInfo["gameControllerData_teams"]
         del extendedInfo["gameControllerData_players"]
 
+        return extendedInfo
+
     def calcReward(self, extendedInfo: Dict[str, Any]) -> float:
         """
         Calculate the reward for the agent from extended info, which include some groundTruth information of the game status
         """
-        ballPos = extendedInfo["balls"][0]["position"]
+        ownTeamData = extendedInfo["gameControllerData"]["teams"][
+            0 if int(self.agent_selection) in self.team1 else 1
+        ]
+        opponentTeamData = extendedInfo["gameControllerData"]["teams"][
+            1 if int(self.agent_selection) in self.team1 else 0
+        ]
+        ballPos = extendedInfo["groundTruthWorldState"]["balls"][0]["position"]
         ballPos = shapely.Point(
             ballPos[0],
             ballPos[1],
         )
-        ownPos = extendedInfo["ownPose"]["translation"]
+        ownPos = extendedInfo["groundTruthWorldState"]["ownPose"]["translation"]
         ownPos = shapely.Point(ownPos[0], ownPos[1])
         ownGoal = (
             SoccerFieldAreas.ownGoal
@@ -769,15 +793,24 @@ class SimRobotEnv(AECEnv):
             else SoccerFieldAreas.ownGoal
         )
 
-        if ownGoal.contains(ballPos):
-            return -1
+        reward = 0
 
-        if opponentGoal.contains(ballPos):
-            return 1
+        if hasattr(self, "oldScore"):
+            if ownTeamData["score"] > self.oldScore:
+                reward += 1000
+
+        if hasattr(self, "oldDist"):
+            if ballPos.distance(ownPos) < self.oldDist:
+                reward += 0.5
+            else:
+                reward -= 0.5
+
+        self.oldDist = ballPos.distance(ownPos)
+        self.oldScore = ownTeamData["score"]
 
         # if not SoccerFieldAreas.fieldBoundary.contains(ballPos):
 
-        return 0
+        return reward
 
     def configShm(self):
         """
